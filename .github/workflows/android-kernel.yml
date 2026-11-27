@@ -2,6 +2,9 @@
 # Copyright (C) 2026 Michael Lohr <michael@lohr.dev>
 name: Android kernel bring-up
 on:
+  push:
+    branches: [feat/android]
+    paths: ['.github/workflows/android-kernel.yml', 'kernel/**', 'guest/android/kernel.config']
   workflow_dispatch:
 permissions:
   contents: read
