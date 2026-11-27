@@ -134,10 +134,20 @@ exit 1
 		await new Promise(resolve => setTimeout(resolve, 1000));
 	}
 	await writeFile(`${reports}/settings.png`, await encodePNG(display.desktop.screenshot()));
-	// Exercise the same pointer path as the browser, through Wayland and InputFlinger.
-	display.desktop.click(180, 625);
-	await waitForActivity(homePackage, 'home-after-pointer');
-	await writeFile(`${reports}/input-verified.txt`, 'Wayland pointer click on Home returned from Settings to the launcher.\n');
+	// Use an app control that is already visible; SystemUI's nav bar can arrive later.
+	display.desktop.click(180, 310);
+	let networkOpened = false;
+	for (let i = 0; i < 60; i++) {
+		const current = await vm.exec('/bin/nsenter', [...enter, '/system/bin/dumpsys', 'activity', 'activities'], { signal: AbortSignal.timeout(15000) });
+		await writeFile(`${reports}/network-after-pointer.txt`, JSON.stringify(current, null, 2));
+		if (current.stdout.split('\n').some(line => /(?:mResumedActivity|topResumedActivity)[:=]/.test(line) && line.includes('com.android.settings/.Settings$NetworkDashboardActivity'))) {
+			networkOpened = true;
+			break;
+		}
+		await new Promise(resolve => setTimeout(resolve, 1000));
+	}
+	if (!networkOpened) throw new Error('Wayland pointer click did not open the Network & internet activity');
+	await writeFile(`${reports}/input-verified.txt`, 'Wayland pointer click opened Network & internet from Settings.\n');
 } catch (error) {
 	await writeFile(`${reports}/error.txt`, `${stage}: ${error instanceof Error ? error.stack : error}`);
 	process.exitCode = 1;

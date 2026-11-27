@@ -104,7 +104,7 @@ bun run test:pages
 
 Place the compressed images and `images.json` in `vendor/android/web/` first.
 `test:pages` boots the exact packaged kernel and compressed disks, checks the
-launcher and Settings, and clicks Home through the Wayland pointer path.
+launcher and Settings, and opens Network & internet through the Wayland pointer path.
 
 `dist-pages/` is the complete static site, with relative asset URLs for project
 paths. A COI service worker provides browser isolation on Pages. Use a current
