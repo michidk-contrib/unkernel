@@ -1,7 +1,7 @@
 {
   "name": "unkernel",
   "version": "0.2.0",
-  "description": "Linux on WebAssembly: boot Alpine, Debian or your own aarch64 Linux userland in Node or the browser",
+  "description": "Android on unkernel: experimental AArch64 Android userspace and framework bring-up",
   "license": "MIT AND GPL-2.0-only",
   "author": "Pooya Parsa <pooya@pi0.io>",
   "repository": {
@@ -51,7 +51,7 @@
   "scripts": {
     "build": "obuild",
     "typecheck": "tsc -p .",
-    "test": "pnpm typecheck && pnpm test:block && pnpm test:net && pnpm test:tty && pnpm test:http && pnpm test:ws && pnpm test:9p && pnpm test:distro && pnpm test:gl-gpu && pnpm test:vk && pnpm test:va && pnpm test:audio",
+    "test": "bun run typecheck && bun run test:block && bun run test:net && bun run test:tty && bun run test:http && bun run test:ws && bun run test:9p && bun run test:distro && bun run test:gl-gpu && bun run test:vk && bun run test:va && bun run test:audio",
     "test:block": "node --test test/block.test.ts",
     "test:net": "node --test test/net.test.ts",
     "test:tty": "node --test test/tty.test.ts",
@@ -68,16 +68,22 @@
     "test:va": "node --test test/va.test.ts test/va-h264.test.ts test/va-decoders.test.ts test/va-av1.test.ts test/va-frames.test.ts test/va-enc.test.ts",
     "test:audio": "node --test test/audio.test.ts",
     "unkernel": "node js/cli.ts",
-    "dev": "pnpm -C web dev",
-    "build:web": "pnpm -C web build",
-    "start:web": "pnpm -C web start",
-    "typecheck:web": "pnpm -C web typecheck",
-    "test:web": "node web/test/headless.mjs"
+    "android:prepare": "bash guest/android/prepare.sh",
+    "android:probe": "node guest/android/probe.ts",
+    "android:check": "node guest/android/probe.ts --require-framework",
+    "test:android": "node --test test/android.test.ts",
+    "build:pages": "bun run build && bun scripts/build-pages.ts",
+    "check:pages": "tsc -p pages/tsconfig.json",
+    "test:pages": "node --test test/android-pages.test.ts"
   },
   "devDependencies": {
     "@types/node": "^24.19.2",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
+    "coi-serviceworker": "^0.1.7",
     "obuild": "^0.4.45",
     "typescript": "^7.0.2"
   },
-  "packageManager": "pnpm@12.14.0"
+  "packageManager": "bun@1.4.4",
+  "private": true
 }

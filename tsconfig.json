@@ -3,8 +3,14 @@
     "target": "esnext",
     "module": "nodenext",
     "moduleResolution": "nodenext",
-    "lib": ["esnext", "dom", "dom.iterable"],
-    "types": ["node"],
+    "lib": [
+      "esnext",
+      "dom",
+      "dom.iterable"
+    ],
+    "types": [
+      "node"
+    ],
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
@@ -18,5 +24,10 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["js", "test/*.ts", "build.config.ts"]
+  "include": [
+    "js",
+    "test/*.ts",
+    "build.config.ts",
+    "guest/android/*.ts"
+  ]
 }

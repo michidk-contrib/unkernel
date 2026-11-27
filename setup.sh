@@ -2,13 +2,12 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 # Copyright (C) 2026 Pooya Parsa <pooya@pi0.io>
 # Set up unkernel from a fresh clone: check prerequisites, then build
-# everything (kwemu, patched wasm-ld, the UP and SMP kernels + their
+# the retained engine (kwemu, patched wasm-ld, the UP and SMP kernels + their
 # 32-bit-memory variants, the data disk template, the base initramfs and
 # the bundle unkernel.wasm with the patch to the SMP kernel, the Alpine
 # and Debian images with distros.json; guest Vulkan's translator where
-# cargo can target wasm32). The browser page (web/)
-# needs its npm dependencies, which this script does not install: run
-# pnpm install, then pnpm dev.
+# cargo can target wasm32). Install SDK dependencies separately with bun install. Android bring-up
+# is under guest/android/; the upstream desktop/demo page is not included.
 #
 #   ./setup.sh           check, then build (idempotent; re-run to resume)
 #   ./setup.sh --check   only check prerequisites
@@ -95,11 +94,11 @@ check() {
 		note disk "WARNING: ${avail} GiB free; a full setup needs about 5 GiB"
 	fi
 
-	# Optional: pnpm for the SDK build and the browser page (web/).
-	if [ -n "$(real_bin pnpm)" ] || [ -n "$(command -v pnpm || true)" ]; then
-		note pnpm "found (pnpm install, then pnpm dev for the browser page)"
+	# Bun runs the SDK checks and Android bring-up commands.
+	if command -v bun >/dev/null; then
+		note bun "$(bun --version)"
 	else
-		note pnpm "not found (optional, for the SDK build and the browser page: https://pnpm.io/installation)"
+		note bun "not found (install Bun to run the SDK checks)"
 	fi
 	# Optional: guest Vulkan's SPIR-V translator (vk/build.sh naga) needs
 	# cargo with the wasm32-unknown-unknown target; without it the SDK has

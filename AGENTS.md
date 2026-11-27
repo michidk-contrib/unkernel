@@ -1,5 +1,25 @@
 # AGENTS.md
 
+## Android fork
+
+This checkout targets a full Android graphical system on unkernel. It is separate
+from Side by Side and the package-demo design. Work is on `feat/android`.
+
+- Keep the kernel, CPU emulator, SDK, graphics bridges, guest tools and licenses.
+  The upstream desktop/demo website and upstream release workflow were removed.
+  `pages/` is the focused Android shell demo, deployed by the Pages workflow.
+- `guest/android/` owns Android bring-up. `bun run android:prepare` downloads a
+  pinned Bionic fixture. `bun run test:android` runs real Android-linked binaries
+  in the wasm guest. `bun run android:check` also requires the currently probed
+  framework prerequisites and exits 2 when they are missing.
+- The Bionic fixture is a kernel compatibility check, not a booted Android system.
+  Do not claim Android UI, APKs, ART or SurfaceFlinger work until actually verified.
+- Use Bun. Do not restore the removed pnpm workspace or lockfile.
+- Use a feature branch and the managed signed GitHub API publication flow when
+  asked to publish. Do not publish to main. Preserve upstream attribution.
+
+The following upstream notes describe the retained engine and build system.
+
 unkernel runs Linux 7.3, compiled to a single wasm module (`arch/wasm` with an
 MMU), in Node 24 or a browser with JSPI. User space is unmodified aarch64
 Linux ELF (ARMv8.0-A with FP, AdvSIMD and the crypto, CRC32 and LSE
@@ -22,7 +42,6 @@ programs).
 | [.agents/a64.md](.agents/a64.md) | the AArch64 CPU (src/a64): layout, group-file conventions, adding instructions, tests; `.agents/a64/` holds instruction semantics and the coverage tool (`isa.md`), the decoded-op tier (`tier.md`), the JIT (`jit.md`), numbers, rejected designs and levers (`performance.md`) |
 | [.agents/kwemu.md](.agents/kwemu.md) | the ISA-neutral core: MMU and TLBs, block cache, JIT core (regions, invariants, SMP, compile window, host contract), softfloat, measuring, rejected designs |
 | [.agents/js.md](.agents/js.md) | the SDK (`js/`): rules, build checks, disks, network stack and Wisp |
-| [.agents/web.md](.agents/web.md) | the browser page, releasing its kernel, engine quirks |
 | [.agents/data-disk.md](.agents/data-disk.md) | the persistent data disk, overlay root, safe mode, image updates |
 | [.agents/toolchain.md](.agents/toolchain.md) | patched wasm-ld, Binaryen, Zig 0.16, host tools, pinned downloads |
 | [.agents/testing.md](.agents/testing.md) | quick checks per area, CLI exit codes, the full matrix, release CI |
@@ -72,14 +91,11 @@ These cut across areas; each area file lists its own invariants.
 - **Guest image**: `kernel/build.sh base` (the base initramfs and the
   bundle) or `kernel/build.sh distro [NAME]` (the images and
   `distros.json`); guest/README.md.
-- **Page**: kernel and guest changes reach the deployed page with the next
-  release (`.github/workflows/release.yml`, which the maintainer runs
-  by hand; web.md).
+- **Page**: `bun run build:pages` packages the pinned Android fixture and SDK.
+  `.github/workflows/pages.yml` deploys the static example on GitHub Pages.
 
 ## Conventions
 
-- When asked to commit, commit on `main` rather than a new branch, unless
-  told otherwise.
 - Commit messages are imperative sentences, optionally prefixed with an
   area (`web: `); kernel patches use kernel style (kernel.md). No
   `Signed-off-by` lines.

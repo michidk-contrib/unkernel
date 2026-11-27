@@ -138,3 +138,17 @@ among them [wland](https://github.com/pithings/wland) (MPL-2.0 AND MIT;
 source in that repository and its npm package),
 [wterm](https://wterm.dev/) (Apache-2.0), React (MIT) and the Geist fonts
 (SIL Open Font License 1.1).
+
+## Android browser example
+
+The Pages example includes xterm.js and its fit addon under the MIT license,
+and coi-serviceworker under the MIT license. Their license texts are copied to
+`licenses/` in the static site. Android Bionic, mksh and Toybox binaries come
+from Termux's `aosp-libs` and `aosp-utils` Android 9.0.0-r76-5 packages, pinned
+in `guest/android/pins.sh`. The package recipes and source locations are at
+<https://github.com/termux/termux-packages/tree/master/packages/aosp-libs>
+and <https://github.com/termux/termux-packages/tree/master/packages/aosp-utils>.
+Bionic retains its BSD notices, mksh its MirOS notices, and Toybox its 0BSD
+notices in the upstream Android sources at <https://android.googlesource.com/>.
+The fixture contains only the small userspace compatibility tools; no Android
+system image is redistributed by this example.

@@ -1,0 +1,25 @@
+{
+  "_license": "SPDX-License-Identifier: MIT",
+  "_copyright": "Copyright (C) 2026 Michael Lohr <michael@lohr.dev>",
+  "androidVersion": "13",
+  "distribution": "LineageOS 20 / Waydroid VANILLA",
+  "architecture": "arm64",
+  "sources": {
+    "system": "https://ota.waydro.id/system/lineage/waydroid_arm64/VANILLA.json",
+    "vendor": "https://ota.waydro.id/vendor/waydroid_arm64/MAINLINE.json"
+  },
+  "images": {
+    "system": {
+      "filename": "lineage-20.0-20260927-VANILLA-waydroid_arm64-system.zip",
+      "url": "https://sourceforge.net/projects/waydroid/files/images/system/lineage/waydroid_arm64/lineage-20.0-20260927-VANILLA-waydroid_arm64-system.zip/download",
+      "sha256": "5fb8179ed4455f45919c5a2bfbfdd1591619295994ad321217f03bb1dcfc53a7",
+      "downloadBytes": 912267974
+    },
+    "vendor": {
+      "filename": "lineage-20.0-20261022-MAINLINE-waydroid_arm64-vendor.zip",
+      "url": "https://sourceforge.net/projects/waydroid/files/images/vendor/waydroid_arm64/lineage-20.0-20261022-MAINLINE-waydroid_arm64-vendor.zip/download",
+      "sha256": "89d5fb9a5c977adcc9fc7755483d3762c397b9c8579524f9d1df052b51c83fb3",
+      "downloadBytes": 147676229
+    }
+  }
+}

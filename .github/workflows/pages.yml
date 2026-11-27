@@ -1,0 +1,43 @@
+# SPDX-License-Identifier: MIT
+# Copyright (C) 2026 Michael Lohr <michael@lohr.dev>
+name: Pages
+on:
+  push:
+    branches: [main, feat/android]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: bun install --frozen-lockfile
+      - run: bun run android:prepare
+      - run: bun run typecheck && bun run check:pages
+      - run: bun run test:android
+      - run: bun run build:pages
+      - run: bun run test:pages
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist-pages
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
