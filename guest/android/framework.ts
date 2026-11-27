@@ -39,10 +39,19 @@ try {
 	]);
 	await writeFile(`${reports}/init.txt`, initOutput);
 	await writeFile(`${reports}/result.json`, JSON.stringify({ stage, ...result }, null, 2));
-	const diagnostics = await vm.exec('/bin/sh', ['-c', 'ps -ef; echo KERNEL_LOG; dmesg | tail -300; echo ANDROID_DATA; ls -la /android/data; echo ANDROID_PROPERTIES; /bin/chroot /android /system/bin/getprop'], { signal: AbortSignal.timeout(30000) });
+	const diagnostics = await vm.exec('/bin/sh', ['-c', 'ps -ef; echo KERNEL_LOG; dmesg | tail -300; echo ANDROID_DATA; ls -la /android/data; echo ANDROID_MOUNTS; cat /proc/mounts'], { signal: AbortSignal.timeout(30000) });
 	await writeFile(`${reports}/diagnostics.txt`, JSON.stringify(diagnostics, null, 2));
+	// APEX mounts belong to Android's mount namespace; inspect its properties there.
+	const children = await vm.exec('/bin/cat', [`/proc/${init.pid}/task/${init.pid}/children`]);
+	const child = children.stdout.trim().split(/\s+/)[0];
+	if (!child || !/^\d+$/.test(child)) throw new Error('Android init exited before framework readiness; inspect the console report');
+	const enter = ['-t', child, '-m', '-p', '/bin/chroot', '/android'];
+	const properties = await vm.exec('/bin/nsenter', [...enter, '/system/bin/getprop'], { signal: AbortSignal.timeout(15000) });
+	await writeFile(`${reports}/properties.txt`, JSON.stringify(properties, null, 2));
+	const logcat = await vm.exec('/bin/nsenter', [...enter, '/system/bin/logcat', '-b', 'all', '-d', '-t', '1000'], { signal: AbortSignal.timeout(20000) });
+	await writeFile(`${reports}/logcat.txt`, JSON.stringify(logcat, null, 2));
 	// An init process staying alive alone never establishes that Android booted.
-	const booted = await vm.exec('/bin/chroot', ['/android', '/system/bin/getprop', 'sys.boot_completed'], { signal: AbortSignal.timeout(15000) });
+	const booted = await vm.exec('/bin/nsenter', [...enter, '/system/bin/getprop', 'sys.boot_completed'], { signal: AbortSignal.timeout(15000) });
 	await writeFile(`${reports}/boot-completed.txt`, JSON.stringify(booted, null, 2));
 	if (booted.exitCode !== 0 || booted.stdout.trim() !== '1') throw new Error('Android has not reported sys.boot_completed=1; inspect framework reports');
 } catch (error) {

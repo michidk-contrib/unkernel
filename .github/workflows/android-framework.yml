@@ -28,7 +28,17 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run typecheck
       - run: bun run android:prepare
+      - uses: actions/cache/restore@v4
+        id: images
+        with:
+          path: vendor/android/system/*.zip
+          key: android-images-${{ hashFiles('guest/android/images.json') }}
       - run: python3 guest/android/prepare-system.py
+      - uses: actions/cache/save@v4
+        if: steps.images.outputs.cache-hit != 'true'
+        with:
+          path: vendor/android/system/*.zip
+          key: android-images-${{ hashFiles('guest/android/images.json') }}
       - uses: actions/download-artifact@v4
         if: inputs.kernel_run != '' && inputs.kernel_run != null
         with:
