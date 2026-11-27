@@ -15,8 +15,13 @@ cleanup() {
 trap cleanup EXIT
 for image in system vendor; do
     sudo mount -o loop,ro "$root/vendor/android/system/$image.img" "$mount_dir"
+    if [ "$image" = system ]; then
+        excludes=(--exclude-regex='^system/lib(/|$)|^system/apex/[^/]+/lib(/|$)|^system/framework/arm(/|$)|^system/system_ext/apex/com.android.vndk.v(28|29|30)(/|$)')
+    else
+        excludes=(--exclude-path=lib)
+    fi
     # Read the original inode owners, modes and xattrs directly from ext4.
-    sudo "$erofs_bin/mkfs.erofs" -z zstd,level=15 --workers=2 "$out/$image.erofs" "$mount_dir"
+    sudo "$erofs_bin/mkfs.erofs" --quiet -z zstd,level=15 --workers=2 "${excludes[@]}" "$out/$image.erofs" "$mount_dir"
     sudo umount "$mount_dir"
 done
 python3 - "$out" <<'PY'

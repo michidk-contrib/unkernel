@@ -18,6 +18,17 @@ jobs:
         with:
           version: 0.16.0
       - uses: actions/cache/restore@v4
+        id: erofs
+        with:
+          path: vendor/toolchain/erofs-utils
+          key: android-erofs-${{ hashFiles('guest/tools/erofs-utils.sh', 'guest/tools/erofs-utils-patches/**', 'guest/tools/pins.sh') }}
+      - run: bash guest/tools/erofs-utils.sh
+      - uses: actions/cache/save@v4
+        if: steps.erofs.outputs.cache-hit != 'true'
+        with:
+          path: vendor/toolchain/erofs-utils
+          key: android-erofs-${{ hashFiles('guest/tools/erofs-utils.sh', 'guest/tools/erofs-utils-patches/**', 'guest/tools/pins.sh') }}
+      - uses: actions/cache/restore@v4
         id: images
         with:
           path: vendor/android/system/*.zip
