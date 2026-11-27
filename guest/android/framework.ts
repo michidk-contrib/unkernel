@@ -136,6 +136,8 @@ exit 1
 	}
 	await writeFile(`${reports}/settings.png`, await encodePNG(display.desktop.screenshot()));
 	// Use an app control that is already visible; SystemUI's nav bar can arrive later.
+	// Waydroid updates its cursor position on motion, not the initial enter event.
+	display.desktop.pointerMove(180, 309);
 	display.desktop.click(180, 310);
 	let networkOpened = false;
 	for (let i = 0; i < 60; i++) {
