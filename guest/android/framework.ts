@@ -94,7 +94,8 @@ exit 1
 	await writeFile(`${reports}/home-activity.txt`, JSON.stringify(home, null, 2));
 	const homeComponent = home.stdout.trim().split('\n').at(-1) ?? '';
 	if (home.exitCode !== 0 || !/^[\w.]+\/[\w.$]+$/.test(homeComponent)) throw new Error('Android has no resolvable Home activity');
-	const homePackage = homeComponent.slice(0, homeComponent.indexOf('/'));
+	// Provision's temporary HOME activity redirects to the pinned Trebuchet launcher.
+	const homePackage = 'com.android.launcher3';
 	const waitForActivity = async (packageName: string, name: string) => {
 		for (let i = 0; i < 30; i++) {
 			const current = await vm.exec('/bin/nsenter', [...enter, '/system/bin/dumpsys', 'activity', 'activities'], { signal: AbortSignal.timeout(15000) });
