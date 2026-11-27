@@ -129,7 +129,21 @@ deploying the page needs no kernel toolchain.
      name a release that has them. So a deploy (Vercel) and CI ship a
      release, never a local build.
   1 and 2 show as "local build" in About (Settings), 3 as the release's tag.
-- A release is downloaded at build time (the dev server only when it has no
+- A page build with a release that carries `page.json`
+  (`web/scripts/page-assets.ts`, which the release workflow runs) downloads
+  only that and loads everything from the release mirror,
+  `https://mirror.unkernel.dev/github/pithings/unkernel/releases/download/<tag>/<file>`
+  (`KW_MIRROR=<url>` another base, `KW_MIRROR=1` on a dev server too,
+  `KW_MIRROR=0` never): GitHub's assets with CORS, Range, one ETag on 200
+  and 206, immutable, for the origins the mirror knows (unkernel.dev,
+  localhost, `*.vercel.app`). The kernels and the Vulkan translator are
+  their `.wasm.gz` (the mirror sends files as they are; the SDK gunzips a
+  body that starts with gzip's magic, `js/core/load.ts`), the GL renderer
+  and the images as they are, and nothing goes into the output;
+  `page.json`'s ABI must be this checkout's. The copy, hashed assets and
+  `/distros/` below are for local builds, dev servers and releases without
+  `page.json`.
+- Otherwise a release is downloaded at build time (the dev server only when it has no
   copy yet, and then without a network check), because GitHub serves
   release assets without CORS (both the `github.com` redirect and
   `release-assets.githubusercontent.com`), so the browser cannot fetch
