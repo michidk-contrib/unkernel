@@ -6,7 +6,8 @@
     "lib": [
       "esnext",
       "dom",
-      "dom.iterable"
+      "dom.iterable",
+      "dom.asynciterable"
     ],
     "types": [
       "node"
