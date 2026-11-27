@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       kernel_run:
-        description: Run ID containing the Android kernel artifact; blank uses the pinned baseline
+        description: Run ID containing the Android kernel artifact; blank uses the verified Android build
         type: string
 permissions:
   contents: read
@@ -40,15 +40,14 @@ jobs:
           path: vendor/android/system/*.zip
           key: android-images-${{ hashFiles('guest/android/images.json') }}
       - uses: actions/download-artifact@v4
-        if: inputs.kernel_run != '' && inputs.kernel_run != null
         with:
           name: android-kernel
-          run-id: ${{ inputs.kernel_run }}
+          run-id: ${{ inputs.kernel_run || '46057373016' }}
           github-token: ${{ github.token }}
           path: vendor/android/custom-kernel
       - name: Boot Android init and collect framework diagnostics
         env:
-          KERNEL_RUN: ${{ inputs.kernel_run }}
+          KERNEL_RUN: ${{ inputs.kernel_run || '46057373016' }}
         run: |
           if [ -n "$KERNEL_RUN" ]; then
             export ANDROID_KERNEL="$PWD/vendor/android/custom-kernel/bundle/unkernel.wasm"

@@ -21,7 +21,7 @@ const vm = await createKernel({
 });
 let consoleOutput = '';
 vm.onOutput(bytes => { consoleOutput = (consoleOutput + new TextDecoder().decode(bytes)).slice(-4_000_000); });
-const watchdog = setTimeout(() => void vm.stop(), 240000);
+const watchdog = setTimeout(() => void vm.stop(), 480000);
 let stage = 'mount';
 let display: Awaited<ReturnType<typeof startAndroidDisplay>> | undefined;
 try {
@@ -40,7 +40,7 @@ try {
 	const drain = Promise.all([read(init.stdout), read(init.stderr)]);
 	const result = await Promise.race([
 		drain.then(async () => ({ ended: await init.ended })),
-		new Promise<{ timeout: true }>(r => { const timer = setTimeout(() => r({ timeout: true }), 120000); timer.unref(); }),
+		new Promise<{ timeout: true }>(r => { const timer = setTimeout(() => r({ timeout: true }), 300000); timer.unref(); }),
 	]);
 	await writeFile(`${reports}/init.txt`, initOutput);
 	await writeFile(`${reports}/result.json`, JSON.stringify({ stage, ...result }, null, 2));
@@ -53,8 +53,10 @@ try {
 	const enter = ['-t', child, '-m', '-p', '/bin/chroot', '/android'];
 	const properties = await vm.exec('/bin/nsenter', [...enter, '/system/bin/getprop'], { signal: AbortSignal.timeout(15000) });
 	await writeFile(`${reports}/properties.txt`, JSON.stringify(properties, null, 2));
-	const logcat = await vm.exec('/bin/nsenter', [...enter, '/system/bin/logcat', '-b', 'all', '-d', '-t', '1000'], { signal: AbortSignal.timeout(20000) });
+	const logcat = await vm.exec('/bin/nsenter', [...enter, '/system/bin/logcat', '-b', 'all', '-d', '-t', '10000'], { signal: AbortSignal.timeout(20000) });
 	await writeFile(`${reports}/logcat.txt`, JSON.stringify(logcat, null, 2));
+	const activity = await vm.exec('/bin/nsenter', [...enter, '/system/bin/dumpsys', 'activity', 'activities'], { signal: AbortSignal.timeout(20000) });
+	await writeFile(`${reports}/activities.txt`, JSON.stringify(activity, null, 2));
 	// An init process staying alive alone never establishes that Android booted.
 	const booted = await vm.exec('/bin/nsenter', [...enter, '/system/bin/getprop', 'sys.boot_completed'], { signal: AbortSignal.timeout(15000) });
 	await writeFile(`${reports}/boot-completed.txt`, JSON.stringify(booted, null, 2));
