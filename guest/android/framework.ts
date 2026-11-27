@@ -25,6 +25,7 @@ vm.onOutput(bytes => { consoleOutput = (consoleOutput + new TextDecoder().decode
 const watchdog = setTimeout(() => void vm.stop(), 1080000);
 let stage = 'mount';
 let display: Awaited<ReturnType<typeof startAndroidDisplay>> | undefined;
+let androidNamespace: string[] | undefined;
 try {
 	const setupScript = await readFile(new URL('./runtime.sh', import.meta.url), 'utf8');
 	const setup = await vm.exec('/bin/sh', ['-ec', setupScript], { signal: AbortSignal.timeout(60000) });
@@ -76,6 +77,7 @@ exit 1
 	const child = children.stdout.trim().split(/\s+/)[0];
 	if (!child || !/^\d+$/.test(child)) throw new Error('Android init exited before framework readiness; inspect the console report');
 	const enter = ['-t', child, '-m', '-p'];
+	androidNamespace = enter;
 	const properties = await vm.exec('/bin/nsenter', [...enter, '/system/bin/getprop'], { signal: AbortSignal.timeout(15000) });
 	await writeFile(`${reports}/properties.txt`, JSON.stringify(properties, null, 2));
 	const logcat = await vm.exec('/bin/nsenter', [...enter, '/system/bin/logcat', '-b', 'main', '-b', 'system', '-b', 'crash', '-d', '-t', '3000'], { signal: AbortSignal.timeout(60000) }).catch(error => ({ error: String(error) }));
@@ -108,7 +110,7 @@ exit 1
 		for (let i = 0; i < 30; i++) {
 			const current = await vm.exec('/bin/nsenter', [...enter, '/system/bin/dumpsys', 'activity', 'activities'], { signal: AbortSignal.timeout(15000) });
 			await writeFile(`${reports}/${name}.txt`, JSON.stringify(current, null, 2));
-			if (current.stdout.split('\n').some(line => /(?:mResumedActivity|topResumedActivity):/.test(line) && line.includes(`${packageName}/`))) return;
+			if (current.stdout.split('\n').some(line => /(?:mResumedActivity|topResumedActivity)[:=]/.test(line) && line.includes(`${packageName}/`))) return;
 			await new Promise(resolve => setTimeout(resolve, 1000));
 		}
 		throw new Error(`${packageName} did not become the resumed Android activity`);
@@ -116,7 +118,16 @@ exit 1
 	const launchHome = await vm.exec('/bin/nsenter', [...enter, '/system/bin/am', 'start', '-W', '-a', 'android.intent.action.MAIN', '-c', 'android.intent.category.HOME'], { signal: AbortSignal.timeout(60000) });
 	await writeFile(`${reports}/launch-home.txt`, JSON.stringify(launchHome, null, 2));
 	await waitForActivity(homePackage, 'launcher');
-	await new Promise(resolve => setTimeout(resolve, 5000));
+	for (let i = 0; i < 60; i++) {
+		const frame = display.desktop.screenshot();
+		let visiblePixels = 0;
+		for (let pixel = 0; pixel < frame.data.length; pixel += 4) {
+			if (frame.data[pixel]! > 16 || frame.data[pixel + 1]! > 16 || frame.data[pixel + 2]! > 16) visiblePixels++;
+		}
+		if (visiblePixels >= 1000) break;
+		if (i === 59) throw new Error('Home is resumed but the display remains blank');
+		await new Promise(resolve => setTimeout(resolve, 1000));
+	}
 	await writeFile(`${reports}/launcher.png`, await encodePNG(display.desktop.screenshot()));
 	stage = 'input';
 	const settings = await vm.exec('/bin/nsenter', [...enter, '/system/bin/am', 'start', '-W', '-a', 'android.settings.SETTINGS'], { signal: AbortSignal.timeout(60000) });
@@ -131,6 +142,21 @@ exit 1
 } catch (error) {
 	await writeFile(`${reports}/error.txt`, `${stage}: ${error instanceof Error ? error.stack : error}`);
 	process.exitCode = 1;
+	if (androidNamespace) {
+		for (const [name, command] of [
+			['launcher-stack', ['sh', '-c', 'pid=$(pidof com.android.launcher3); [ -n "$pid" ] && debuggerd -j "$pid"']],
+			['surfaceflinger', ['dumpsys', 'SurfaceFlinger']],
+			['window', ['dumpsys', 'window', 'windows']],
+			['latest-logcat', ['logcat', '-b', 'main', '-b', 'system', '-b', 'crash', '-d', '-t', '3000']],
+		] satisfies [string, string[]][]) {
+			try {
+				const diagnostic = await vm.exec('/bin/nsenter', [...androidNamespace, `/system/bin/${command[0]}`, ...command.slice(1)], { signal: AbortSignal.timeout(60000) });
+				await writeFile(`${reports}/${name}.txt`, JSON.stringify(diagnostic, null, 2));
+			} catch (diagnosticError) {
+				await writeFile(`${reports}/${name}-error.txt`, String(diagnosticError));
+			}
+		}
+	}
 } finally {
 	clearTimeout(watchdog);
 	await display?.capture().catch(error => writeFile(`${reports}/display-error.txt`, String(error)));
