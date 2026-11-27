@@ -31,6 +31,7 @@ waydroid.xdg_runtime_dir=/run/wayland
 waydroid.wayland_display=wayland-0
 waydroid.background_start=false
 debug.hwui.renderer=skiagl
+debug.sf.nobootanimation=1
 sys.use_memfd=true
 PROPERTIES
 mkdir -p /dev/binderfs
