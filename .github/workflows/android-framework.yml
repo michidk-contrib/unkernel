@@ -1,0 +1,52 @@
+# SPDX-License-Identifier: MIT
+# Copyright (C) 2026 Michael Lohr <michael@lohr.dev>
+name: Android framework bring-up
+on:
+  push:
+    branches: [feat/android]
+    paths: ['.github/workflows/android-framework.yml', 'guest/android/framework.ts']
+  workflow_dispatch:
+    inputs:
+      kernel_run:
+        description: Run ID containing the Android kernel artifact; blank uses the pinned baseline
+        type: string
+permissions:
+  contents: read
+  actions: read
+jobs:
+  boot:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: bun run android:prepare
+      - run: python3 guest/android/prepare-system.py
+      - uses: actions/download-artifact@v4
+        if: inputs.kernel_run != '' && inputs.kernel_run != null
+        with:
+          name: android-kernel
+          run-id: ${{ inputs.kernel_run }}
+          github-token: ${{ github.token }}
+          path: vendor/android/custom-kernel
+      - name: Boot Android init and collect framework diagnostics
+        env:
+          KERNEL_RUN: ${{ inputs.kernel_run }}
+        run: |
+          if [ -n "$KERNEL_RUN" ]; then
+            export ANDROID_KERNEL="$PWD/vendor/android/custom-kernel/bundle/unkernel.wasm"
+          fi
+          node guest/android/framework.ts
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-framework-reports
+          path: vendor/android/framework-reports
+          if-no-files-found: warn
