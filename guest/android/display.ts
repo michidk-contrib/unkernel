@@ -11,7 +11,7 @@ import type { KernelInstance, Subprocess } from '../../js/node.ts';
 export async function startAndroidDisplay(vm: KernelInstance, reports: string) {
 	if (!vm.vsock) throw new Error('The Android display requires guest vsock');
 	const listener = vm.vsock.listen(1023);
-	const desktop = await createHeadless({ link: listener, width: 720, height: 1280 });
+	const desktop = await createHeadless({ link: listener, width: 360, height: 640 });
 	let relayLog = '';
 	let relayProcess: Subprocess | undefined;
 	try {
