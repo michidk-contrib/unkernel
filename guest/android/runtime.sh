@@ -34,7 +34,25 @@ waydroid.stub_sensors_hal=true
 debug.hwui.renderer=skiagl
 debug.sf.nobootanimation=1
 sys.use_memfd=true
+ro.hardware.audio.primary=default
 PROPERTIES
+# Use the supplied 64-bit audio implementations without the 32-bit HAL service.
+for module in /android/vendor/lib64/hw/android.hardware.audio@4.0-impl.so /android/vendor/lib64/hw/android.hardware.audio.effect@4.0-impl.so /android/vendor/lib64/hw/audio.primary.default.so; do
+    [ -f "$module" ] || { echo "Missing virtual audio module: $module" >&2; exit 1; }
+done
+find /android/vendor/etc/vintf -type f -name '*.xml' | while IFS= read -r manifest; do
+    sed -i -e '/<name>android.hardware.audio<\/name>/,/<\/hal>/s@<transport>hwbinder</transport>@<transport arch="64">passthrough</transport>@' -e '/<name>android.hardware.audio.effect<\/name>/,/<\/hal>/s@<transport>hwbinder</transport>@<transport arch="64">passthrough</transport>@' "$manifest"
+done
+find /android/system/etc/init /android/vendor/etc/init -type f -name '*.rc' | while IFS= read -r rc; do
+    awk '
+        /^(service|on|import) / { skip = ($1 == "service" && $2 == "vendor.audio-hal") }
+        skip { next }
+        ($1 == "start" || $1 == "restart") && $2 == "vendor.audio-hal" { next }
+        { print }
+    ' "$rc" > "$rc.unkernel"
+    cat "$rc.unkernel" > "$rc"
+    rm "$rc.unkernel"
+done
 mkdir -p /dev/binderfs
 mount -t binder binder /dev/binderfs
 for device in binder hwbinder vndbinder; do
