@@ -93,6 +93,7 @@
 #                  Default 1
 #   KWEMU_STATS=1  build the UP library with -Dkwemu-stats into vendor/build/kwemu-stats
 #                  (what `stats` sets; ignored with KWEMU=)
+#   KW_KERNEL_CONFIG=file  additional checked Kconfig fragment (e.g. Android)
 #   JOBS=n         parallelism (default: nproc)
 #   KSRC=dir       kernel source tree, e.g. a git worktree (default: vendor/src/linux-wasm-kernel)
 #   KOUT=dir       UP kernel build output (default: vendor/build/kernel)
@@ -329,6 +330,7 @@ check_config() {
 # from the same tree, then lowered (vmlinux32.wasm).
 build_kernel() {
 	local variant="${1:-up}" out="$kout" frags=(kw_defconfig) f stale= kwemu
+	local extra="${KW_KERNEL_CONFIG:-}"
 	if [ "$variant" = smp ]; then
 		out="$kout_smp"
 		frags+=(kw_smp.config)
@@ -350,8 +352,18 @@ build_kernel() {
 	done
 	if [ -n "$stale" ]; then
 		"${make_cmd[@]}" "${frags[@]}"
-		check_config "$out" "${frags[@]}" || exit 1
 	fi
+	# Apply a separate bring-up fragment without modifying the upstream defconfig.
+	# Reconfigure every time one is requested so removed options cannot linger.
+	if [ -n "$extra" ]; then
+		extra="$(realpath "$extra")"
+		[ -f "$extra" ] || { echo "Missing kernel config: $extra" >&2; exit 1; }
+		"${make_cmd[@]}" "${frags[@]}"
+		bash "$ksrc/scripts/kconfig/merge_config.sh" -m -O "$out" "$out/.config" "$extra"
+		"${make_cmd[@]}" olddefconfig
+		frags+=("$extra")
+	fi
+	check_config "$out" "${frags[@]}" || exit 1
 	"${make_cmd[@]}" -j"$jobs" vmlinux
 	echo "kernel ($variant): $out/vmlinux"
 	lower_kernel "$out"
