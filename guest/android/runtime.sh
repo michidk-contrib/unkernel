@@ -29,6 +29,7 @@ ro.hardware.vulkan=pastel
 ro.hardware.hwcomposer=waydroid
 waydroid.xdg_runtime_dir=/run/wayland
 waydroid.wayland_display=wayland-0
+waydroid.background_start=false
 debug.hwui.renderer=skiagl
 sys.use_memfd=true
 PROPERTIES
