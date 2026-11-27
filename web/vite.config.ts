@@ -14,8 +14,8 @@
 // KW_DISTROS give the base bundle and the images; else a local build
 // (vendor/build) when there is one and it may be used (not where CI or
 // VERCEL is set, unless KW_LOCAL=1; KW_LOCAL=0 never); else the newest
-// GitHub release (KW_KERNEL_RELEASE=<tag>: that one), downloaded into
-// web/kernel/release/; GITHUB_TOKEN for the API.
+// GitHub release (KW_KERNEL_RELEASE=<tag>: that one), whose files the page
+// loads from the release mirror (KW_MIRROR); GITHUB_TOKEN for the API.
 //
 // The guest GL renderer (virgl.mjs and virgl.wasm, scripts/kernel.ts; only
 // with the page's GL option are they fetched): the dev server answers
@@ -26,9 +26,9 @@
 // /_vk/kwvk-naga.wasm in dev (serveGl()), /assets/kwvk-naga-<sha256
 // prefix>.wasm in a build.
 //
-// A release with page.json is loaded from the release mirror instead
-// (scripts/kernel.ts): the kernels, the GL renderer, the Vulkan translator
-// and the images are the mirror's URLs, and nothing is emitted or copied.
+// A release is loaded from the release mirror instead (scripts/kernel.ts):
+// the kernels, the GL renderer, the Vulkan translator and the images are
+// the mirror's URLs, and nothing is emitted or copied.
 //
 // The images: the dev server answers /distros/<name>.erofs itself
 // (serveDistros(), revalidated: a local image is rebuilt in place); a build
@@ -173,7 +173,7 @@ export default defineConfig({
 		headers: { "cross-origin-opener-policy": "same-origin", "cross-origin-embedder-policy": "require-corp" },
 		// A page build's output (its index.html) and the kernel files: a change
 		// there must not reload an open dev page, which would end its VM.
-		watch: { ignored: ["**/.output/**", "**/.vercel/**", "**/kernel/release/**", "**/kernel/page/**"] },
+		watch: { ignored: ["**/.output/**", "**/.vercel/**", "**/kernel/page/**"] },
 	},
 	build: { target: "esnext" },
 	// profile.html: the defaults profiler (src/profile.ts), and smp-probe.html:
