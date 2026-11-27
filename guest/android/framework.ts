@@ -31,10 +31,13 @@ mount -t overlay overlay -o lowerdir=/android-lower,upperdir=/android-rw/upper,w
 mount -t ext4 -o ro /dev/wdb /android/vendor
 mount --rbind /dev /android/dev
 mount --rbind /sys /android/sys
+mount -t proc proc /android/proc
 mount -t tmpfs -o size=512m,mode=0771,uid=1000,gid=1000 tmpfs /android/data
 mount -t tmpfs -o mode=0755 tmpfs /android/linkerconfig
 ls -l /android/init /android/system/bin/init /android/system/bin/bootstrap
 cat /proc/filesystems
+cat /android/system/etc/init/init.waydroid.rc
+cat /android/vendor/etc/init/init.waydroid.vendor.rc
 `], { signal: AbortSignal.timeout(60000) });
 	await writeFile(`${reports}/mount.txt`, JSON.stringify(setup, null, 2));
 	if (setup.exitCode !== 0) throw new Error(`System image mount failed: ${setup.stderr}`);
