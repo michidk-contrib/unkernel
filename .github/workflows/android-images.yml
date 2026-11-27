@@ -1,33 +1,39 @@
 # SPDX-License-Identifier: MIT
 # Copyright (C) 2026 Michael Lohr <michael@lohr.dev>
-name: Android image inspection
+name: Android browser images
 on:
   push:
     branches: [feat/android]
-    paths: ['.github/workflows/android-images.yml', 'guest/android/prepare-system.py', 'guest/android/images.json']
+    paths: ['.github/workflows/android-images.yml', 'guest/android/pack-system.sh']
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
-  inspect:
+  pack:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
-      - run: python3 guest/android/prepare-system.py
-      - name: Inspect image root and Android boot configuration
-        run: |
-          mkdir -p vendor/android/reports
-          for name in system vendor; do
-            for path in / /system /apex /system/apex /etc/init /system/etc/init /bin /system/bin; do
-              echo "=== $name $path ==="
-              debugfs -R "ls -l $path" "vendor/android/system/$name.img" 2>&1
-            done > "vendor/android/reports/$name-tree.txt"
-          done
-          debugfs -R 'cat /system/etc/init/hw/init.rc' vendor/android/system/system.img > vendor/android/reports/init.rc 2>&1
-          debugfs -R 'cat /etc/init/hw/init.waydroid.rc' vendor/android/system/vendor.img > vendor/android/reports/init.waydroid.rc 2>&1
-          debugfs -R 'cat /build.prop' vendor/android/system/vendor.img > vendor/android/reports/vendor-build.prop 2>&1
-      - uses: actions/upload-artifact@v4
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29
         with:
-          name: android-image-reports
-          path: vendor/android/reports
+          version: 0.16.0
+      - uses: actions/cache/restore@v4
+        id: images
+        with:
+          path: vendor/android/system/*.zip
+          key: android-images-${{ hashFiles('guest/android/images.json') }}
+      - run: python3 guest/android/prepare-system.py
+      - uses: actions/cache/save@v4
+        if: steps.images.outputs.cache-hit != 'true'
+        with:
+          path: vendor/android/system/*.zip
+          key: android-images-${{ hashFiles('guest/android/images.json') }}
+      - name: Compress Android disks for browser delivery
+        run: bash guest/android/pack-system.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-browser-images
+          path: vendor/android/web
+          compression-level: 0
+          if-no-files-found: warn
