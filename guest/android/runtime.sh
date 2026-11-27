@@ -18,6 +18,19 @@ done
 if [ ! -f /android/system/etc/init/hw/init.zygote64.rc ]; then
     awk '/^service zygote_secondary / {exit} !/restart zygote_secondary/ {print}' /android/system/etc/init/hw/init.zygote64_32.rc > /android/system/etc/init/hw/init.zygote64.rc
 fi
+# Use the software renderer modules present in this ARM64 vendor image.
+for module in /android/vendor/lib64/hw/gralloc.default.so /android/vendor/lib64/hw/vulkan.pastel.so /android/vendor/lib64/egl/libEGL_angle.so; do
+    [ -f "$module" ] || { echo "Missing software graphics module: $module" >&2; exit 1; }
+done
+cat >> /android/vendor/build.prop <<'PROPERTIES'
+ro.hardware.gralloc=default
+ro.hardware.egl=angle
+ro.hardware.vulkan=pastel
+ro.hardware.hwcomposer=waydroid
+waydroid.xdg_runtime_dir=/run/wayland
+waydroid.wayland_display=wayland-0
+debug.hwui.renderer=skiagl
+PROPERTIES
 mount --rbind /dev /android/dev
 mkdir -p /android/dev/socket /android/dev/dm-user /android/dev/selinux
 mount --rbind /sys /android/sys
