@@ -30,10 +30,16 @@ mkdir -p /android-rw/upper /android-rw/work
 mount -t overlay overlay -o lowerdir=/android-lower,upperdir=/android-rw/upper,workdir=/android-rw/work /android
 mount -t ext4 -o ro /dev/wdb /android/vendor
 mount --rbind /dev /android/dev
+mkdir -p /android/dev/socket /android/dev/dm-user /android/dev/selinux
 mount --rbind /sys /android/sys
 mount -t proc proc /android/proc
 mount -t tmpfs -o size=512m,mode=0771,uid=1000,gid=1000 tmpfs /android/data
 mount -t tmpfs -o mode=0755 tmpfs /android/linkerconfig
+mount -t tmpfs -o mode=0755 tmpfs /android/apex
+mount -t tmpfs -o mode=0755 tmpfs /android/mnt
+mkdir -p /android/mnt/vendor /android/mnt/product
+mount -t tmpfs tmpfs /android/debug_ramdisk
+mount -t tmpfs tmpfs /android/second_stage_resources
 ls -l /android/init /android/system/bin/init /android/system/bin/bootstrap
 cat /proc/filesystems
 cat /android/system/etc/init/init.waydroid.rc
