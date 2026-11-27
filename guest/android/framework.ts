@@ -21,7 +21,7 @@ const vm = await createKernel({
 });
 let consoleOutput = '';
 vm.onOutput(bytes => { consoleOutput = (consoleOutput + new TextDecoder().decode(bytes)).slice(-4_000_000); });
-const watchdog = setTimeout(() => void vm.stop(), 480000);
+const watchdog = setTimeout(() => void vm.stop(), 780000);
 let stage = 'mount';
 let display: Awaited<ReturnType<typeof startAndroidDisplay>> | undefined;
 try {
@@ -51,7 +51,20 @@ exec chroot . /bin/sh -ec '
 	const drain = Promise.all([read(init.stdout), read(init.stderr)]);
 	const result = await Promise.race([
 		drain.then(async () => ({ ended: await init.ended })),
-		new Promise<{ timeout: true }>(r => { const timer = setTimeout(() => r({ timeout: true }), 300000); timer.unref(); }),
+		vm.exec('/bin/sh', ['-ec', `
+for i in $(seq 300); do
+    children=$(cat /proc/${init.pid}/task/${init.pid}/children 2>/dev/null || true)
+    for child in $children; do
+        if [ "$(nsenter -t "$child" -m -p /system/bin/getprop sys.boot_completed 2>/dev/null)" = 1 ]; then
+            echo sys.boot_completed=1
+            exit 0
+        fi
+        break
+    done
+    sleep 2
+done
+exit 1
+`], { signal: AbortSignal.timeout(630000) }).then(readiness => ({ readiness })),
 	]);
 	await writeFile(`${reports}/init.txt`, initOutput);
 	await writeFile(`${reports}/result.json`, JSON.stringify({ stage, ...result }, null, 2));
