@@ -41,7 +41,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-      - uses: actions/cache@v4
+      - uses: actions/cache/restore@v4
+        id: toolchain
         with:
           path: |
             vendor/toolchain
@@ -49,6 +50,15 @@ jobs:
             vendor/build/lld22
           key: android-llvm22-${{ hashFiles('kernel/patches/llvm/**') }}
       - run: bun install --frozen-lockfile
+      - run: bash kernel/build.sh toolchain
+      - uses: actions/cache/save@v4
+        if: steps.toolchain.outputs.cache-hit != 'true'
+        with:
+          path: |
+            vendor/toolchain
+            vendor/src/llvm22
+            vendor/build/lld22
+          key: android-llvm22-${{ hashFiles('kernel/patches/llvm/**') }}
       - run: bash kernel/build.sh kernel
       - run: bash kernel/build.sh base
       - name: Verify Binder configuration
@@ -65,6 +75,7 @@ jobs:
         if: always()
         with:
           name: android-kernel
+          include-hidden-files: true
           path: |
             vendor/build/bundle/unkernel.wasm
             vendor/build/kernel/.config

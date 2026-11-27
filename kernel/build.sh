@@ -271,7 +271,7 @@ digest_files() {
 
 # kernel_stamps: export the fixed build stamps (KBUILD_BUILD_*; see the top
 # of this file), unless the environment has them. Both kernels of a tree get
-# the same ones, so their banners differ only in "SMP".
+# the same ones, including any additional config fragment.
 kernel_stamps() {
 	[ -z "${stamps_done:-}" ] || return 0
 	stamps_done=1
@@ -282,6 +282,11 @@ kernel_stamps() {
 			git -C "$ksrc" --no-optional-locks diff --binary HEAD
 			(cd "$ksrc" && git --no-optional-locks ls-files -z -o --exclude-standard | xargs -0r sha256sum)
 			digest_files "$root" src include build.zig build.zig.zon kernel/patches/llvm kernel/tools/fake-llvm
+			if [ -n "${KW_KERNEL_CONFIG:-}" ]; then
+				[ -f "$KW_KERNEL_CONFIG" ] || { echo "Missing kernel config: $KW_KERNEL_CONFIG" >&2; exit 1; }
+				echo "additional kernel config"
+				sha256sum < "$KW_KERNEL_CONFIG"
+			fi
 			echo "zig $("${zig:-zig}" version 2>/dev/null) jit ${KWEMU_JIT:-1} stats ${KWEMU_STATS:-0}"
 		} | sha256sum | cut -c1-12
 	)"
