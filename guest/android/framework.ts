@@ -32,7 +32,18 @@ try {
 	stage = 'display';
 	display = await startAndroidDisplay(vm, reports);
 	stage = 'init';
-	const init = await vm.spawn('/bin/unshare', ['-m', '-p', '-f', '--mount-proc=/android/proc', '/bin/chroot', '/android', '/system/bin/init', 'second_stage'], { pty: false, env: display.env });
+	const init = await vm.spawn('/bin/unshare', ['-m', '-p', '-f', '--mount-proc=/android/proc', '/bin/sh', '-ec', `
+mount --make-rprivate /
+mount --bind / /
+cd /
+exec chroot . /bin/sh -ec '
+    cd /android
+    mkdir -p oldroot
+    pivot_root . oldroot
+    /oldroot/bin/umount -l /oldroot
+    exec /system/bin/init second_stage
+'
+`], { pty: false, env: display.env });
 	let initOutput = '';
 	const read = async (stream: ReadableStream<Uint8Array>) => {
 		for await (const bytes of stream) initOutput = (initOutput + new TextDecoder().decode(bytes)).slice(-4_000_000);
@@ -50,7 +61,7 @@ try {
 	const children = await vm.exec('/bin/cat', [`/proc/${init.pid}/task/${init.pid}/children`]);
 	const child = children.stdout.trim().split(/\s+/)[0];
 	if (!child || !/^\d+$/.test(child)) throw new Error('Android init exited before framework readiness; inspect the console report');
-	const enter = ['-t', child, '-m', '-p', '/bin/chroot', '/android'];
+	const enter = ['-t', child, '-m', '-p'];
 	const properties = await vm.exec('/bin/nsenter', [...enter, '/system/bin/getprop'], { signal: AbortSignal.timeout(15000) });
 	await writeFile(`${reports}/properties.txt`, JSON.stringify(properties, null, 2));
 	const logcat = await vm.exec('/bin/nsenter', [...enter, '/system/bin/logcat', '-b', 'all', '-d', '-t', '10000'], { signal: AbortSignal.timeout(20000) });
@@ -60,7 +71,17 @@ try {
 	// An init process staying alive alone never establishes that Android booted.
 	const booted = await vm.exec('/bin/nsenter', [...enter, '/system/bin/getprop', 'sys.boot_completed'], { signal: AbortSignal.timeout(15000) });
 	await writeFile(`${reports}/boot-completed.txt`, JSON.stringify(booted, null, 2));
-	if (booted.exitCode !== 0 || booted.stdout.trim() !== '1') throw new Error('Android has not reported sys.boot_completed=1; inspect framework reports');
+	if (booted.exitCode !== 0 || booted.stdout.trim() !== '1') {
+		try {
+			const threads = await vm.exec('/bin/nsenter', [...enter, '/system/bin/ps', '-AT', '-o', 'PID,TID,NAME,STAT,TIME,WCHAN'], { signal: AbortSignal.timeout(15000) });
+			await writeFile(`${reports}/threads.txt`, JSON.stringify(threads, null, 2));
+			const trace = await vm.exec('/bin/nsenter', [...enter, '/system/bin/sh', '-c', 'debuggerd -b "$(getprop init.svc_debug_pid.zygote)"'], { signal: AbortSignal.timeout(20000) });
+			await writeFile(`${reports}/zygote-stack.txt`, JSON.stringify(trace, null, 2));
+		} catch (error) {
+			await writeFile(`${reports}/stack-error.txt`, String(error));
+		}
+		throw new Error('Android has not reported sys.boot_completed=1; inspect framework reports');
+	}
 } catch (error) {
 	await writeFile(`${reports}/error.txt`, `${stage}: ${error instanceof Error ? error.stack : error}`);
 	process.exitCode = 1;
