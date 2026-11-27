@@ -8,7 +8,7 @@ const root = resolve(import.meta.dirname, '../..');
 const reports = resolve(root, 'vendor/android/framework-reports');
 await mkdir(reports, { recursive: true });
 const kernel = process.env.ANDROID_KERNEL ?? resolve(root, 'vendor/android/unkernel.wasm');
-const cmdline = 'console=hvc0 rdinit=/init loglevel=7 androidboot.hardware=waydroid androidboot.selinux=permissive androidboot.serialno=unkernel';
+const cmdline = 'console=hvc0 rdinit=/init loglevel=7 printk.devkmsg=on androidboot.hardware=waydroid androidboot.selinux=permissive androidboot.serialno=unkernel';
 const vm = await createKernel({
 	kernel, cmdline, memoryMiB: 2048, cpus: 1,
 	disks: [
@@ -42,11 +42,12 @@ cat /android/vendor/etc/init/init.waydroid.vendor.rc
 	await writeFile(`${reports}/mount.txt`, JSON.stringify(setup, null, 2));
 	if (setup.exitCode !== 0) throw new Error(`System image mount failed: ${setup.stderr}`);
 	stage = 'init';
-	const init = await vm.spawn('/bin/unshare', ['-m', '-p', '-f', '--mount-proc=/android/proc', '/bin/chroot', '/android', '/system/bin/init', 'second_stage']);
+	const init = await vm.spawn('/bin/unshare', ['-m', '-p', '-f', '--mount-proc=/android/proc', '/bin/chroot', '/android', '/system/bin/init', 'second_stage'], { pty: false });
 	let initOutput = '';
-	const drain = (async () => {
-		for await (const bytes of init.output) initOutput = (initOutput + new TextDecoder().decode(bytes)).slice(-4_000_000);
-	})();
+	const read = async (stream: ReadableStream<Uint8Array>) => {
+		for await (const bytes of stream) initOutput = (initOutput + new TextDecoder().decode(bytes)).slice(-4_000_000);
+	};
+	const drain = Promise.all([read(init.stdout), read(init.stderr)]);
 	const result = await Promise.race([
 		drain.then(async () => ({ ended: await init.ended })),
 		new Promise<{ timeout: true }>(r => { const timer = setTimeout(() => r({ timeout: true }), 120000); timer.unref(); }),
