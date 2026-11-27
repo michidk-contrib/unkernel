@@ -38,6 +38,8 @@ debug.sf.nobootanimation=1
 sys.use_memfd=true
 ro.hardware.audio.primary=default
 ro.sf.lcd_density=160
+# First software shader compilation can exceed physical-device watchdog limits.
+ro.hw_timeout_multiplier=10
 PROPERTIES
 # Use the supplied 64-bit audio implementations without the 32-bit HAL service.
 for module in /android/vendor/lib64/hw/android.hardware.audio@4.0-impl.so /android/vendor/lib64/hw/android.hardware.audio.effect@4.0-impl.so /android/vendor/lib64/hw/audio.primary.default.so; do
