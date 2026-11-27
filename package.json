@@ -73,13 +73,13 @@
     "android:check": "node guest/android/probe.ts --require-framework",
     "test:android": "node --test test/android.test.ts",
     "build:pages": "bun run build && bun scripts/build-pages.ts",
-    "check:pages": "tsc -p pages/tsconfig.json",
-    "test:pages": "node --test test/android-pages.test.ts"
+    "check:pages": "tsc -p pages/tsconfig.json && tsc -p scripts/tsconfig.json",
+    "test:pages": "node --test test/android-pages.test.ts",
+    "preview:pages": "bun scripts/serve-pages.ts"
   },
   "devDependencies": {
+    "@types/bun": "^1.4.5",
     "@types/node": "^24.19.2",
-    "@xterm/addon-fit": "^0.11.0",
-    "@xterm/xterm": "^6.0.0",
     "coi-serviceworker": "^0.1.7",
     "obuild": "^0.4.45",
     "typescript": "^7.0.2",

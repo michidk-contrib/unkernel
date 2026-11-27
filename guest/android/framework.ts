@@ -15,8 +15,8 @@ const vm = await createKernel({
 	kernel, cmdline, memoryMiB: 2048, cpus: 1,
 	gpu: true, display: { width: 360, height: 640 },
 	disks: [
-		{ kind: 'file', path: resolve(root, 'vendor/android/system/system.img'), readOnly: true },
-		{ kind: 'file', path: resolve(root, 'vendor/android/system/vendor.img'), readOnly: true },
+		{ kind: 'file', path: process.env.ANDROID_SYSTEM_IMAGE ?? resolve(root, 'vendor/android/system/system.img'), readOnly: true },
+		{ kind: 'file', path: process.env.ANDROID_VENDOR_IMAGE ?? resolve(root, 'vendor/android/system/vendor.img'), readOnly: true },
 	],
 	log: message => process.stderr.write(`${message}\n`),
 });
@@ -27,25 +27,14 @@ let stage = 'mount';
 let display: Awaited<ReturnType<typeof startAndroidDisplay>> | undefined;
 let androidNamespace: string[] | undefined;
 try {
-	const setupScript = await readFile(new URL('./runtime.sh', import.meta.url), 'utf8');
-	const setup = await vm.exec('/bin/sh', ['-ec', setupScript], { signal: AbortSignal.timeout(60000) });
+	const setupScript = await readFile(resolve(process.env.ANDROID_RUNTIME_DIR ?? import.meta.dirname, 'runtime.sh'), 'utf8');
+	const setup = await vm.exec('/bin/sh', ['-ec', setupScript], { env: { ANDROID_DISK_FORMAT: process.env.ANDROID_DISK_FORMAT ?? 'ext4' }, signal: AbortSignal.timeout(60000) });
 	await writeFile(`${reports}/mount.txt`, JSON.stringify(setup, null, 2));
 	if (setup.exitCode !== 0) throw new Error(`System image mount failed: ${setup.stderr}`);
 	stage = 'display';
 	display = await startAndroidDisplay(vm, reports);
 	stage = 'init';
-	const init = await vm.spawn('/bin/unshare', ['-m', '-p', '-f', '--mount-proc=/android/proc', '/bin/sh', '-ec', `
-mount --make-rprivate /
-mount --bind / /
-cd /
-exec chroot . /bin/sh -ec '
-    cd /android
-    mkdir -p oldroot
-    pivot_root . oldroot
-    /oldroot/bin/umount -l /oldroot
-    exec /system/bin/init second_stage
-'
-`], { pty: false, env: display.env });
+	const init = await vm.spawn('/bin/unshare', ['-m', '-p', '-f', '--mount-proc=/android/proc', '/bin/sh', '-ec', await readFile(resolve(process.env.ANDROID_RUNTIME_DIR ?? import.meta.dirname, 'start-init.sh'), 'utf8')], { pty: false, env: display.env });
 	let initOutput = '';
 	const read = async (stream: ReadableStream<Uint8Array>) => {
 		for await (const bytes of stream) initOutput = (initOutput + new TextDecoder().decode(bytes)).slice(-4_000_000);

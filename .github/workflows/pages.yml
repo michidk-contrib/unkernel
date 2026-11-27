@@ -5,8 +5,14 @@ on:
   push:
     branches: [main, feat/android]
   workflow_dispatch:
+    inputs:
+      images_run:
+        description: Run containing the compressed Android browser images
+        type: string
+        default: '46076223205'
 permissions:
   contents: read
+  actions: read
   pages: write
   id-token: write
 concurrency:
@@ -24,11 +30,30 @@ jobs:
         with:
           node-version: 24
       - run: bun install --frozen-lockfile
-      - run: bun run android:prepare
+      - uses: actions/download-artifact@v4
+        with:
+          name: android-kernel
+          run-id: '46067269891'
+          github-token: ${{ github.token }}
+          path: vendor/android/custom-kernel
+      - uses: actions/download-artifact@v4
+        with:
+          name: android-browser-images
+          run-id: ${{ inputs.images_run || '46076223205' }}
+          github-token: ${{ github.token }}
+          path: vendor/android/web
       - run: bun run typecheck && bun run check:pages
-      - run: bun run test:android
       - run: bun run build:pages
+        env:
+          ANDROID_KERNEL: ${{ github.workspace }}/vendor/android/custom-kernel/bundle/unkernel.wasm
+          UNKERNEL_BUNDLE: ${{ github.workspace }}/vendor/android/custom-kernel/bundle/unkernel.wasm
       - run: bun run test:pages
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-pages-boot-reports
+          path: vendor/android/framework-reports
+          if-no-files-found: warn
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist-pages

@@ -7,7 +7,7 @@ from Side by Side and the package-demo design. Work is on `feat/android`.
 
 - Keep the kernel, CPU emulator, SDK, graphics bridges, guest tools and licenses.
   The upstream desktop/demo website and upstream release workflow were removed.
-  `pages/` is the focused Android shell demo, deployed by the Pages workflow.
+  `pages/` is the focused full Android graphical demo, deployed by the Pages workflow.
 - `guest/android/` owns Android bring-up. `bun run android:prepare` downloads a
   pinned Bionic fixture. `bun run test:android` runs real Android-linked binaries
   in the wasm guest. `bun run android:check` also requires the currently probed

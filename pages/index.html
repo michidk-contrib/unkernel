@@ -4,22 +4,21 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Run an experimental Android Bionic shell in your browser with unkernel.">
+<meta name="description" content="Run an experimental Android 13 interface in your browser with unkernel.">
 <title>Android on unkernel</title>
-<link rel="stylesheet" href="./style.css"><link rel="stylesheet" href="./main.css">
+<link rel="stylesheet" href="./style.css">
 <script src="./coi-serviceworker.js"></script>
 <script type="module" src="./main.js"></script>
 </head>
 <body>
 <header><a class="brand" href="./">unkernel <span>/ Android</span></a><a href="https://github.com/michidk-contrib/unkernel/tree/feat/android">Source on GitHub ↗</a></header>
 <main>
-<section class="intro"><h1>Android starts here.</h1><p>A real Android shell, running locally in your browser.<br>A small first step toward booting the full Android interface.</p></section>
+<section class="intro"><h1>Android starts here.</h1><p>Android 13, running locally in your browser.<br>Boot the launcher and explore Android apps.</p></section>
 <section class="workspace" aria-label="Android virtual machine">
-<div class="toolbar"><div><span id="light" class="light"></span><span id="status" role="status" aria-live="polite">Ready to start</span></div><div class="actions"><label for="memory">RAM</label><select id="memory"><option value="512">512 MiB</option><option value="1024">1 GiB</option><option value="2048">2 GiB</option></select><button id="start">Start Android shell</button><button id="stop" disabled>Stop</button></div></div>
-<div id="terminal" aria-label="Interactive Android terminal"></div>
-<div class="commands"><span>Try a command</span><button data-command="toybox --version">toybox --version</button><button data-command="uname -a">uname -a</button><button data-command="ls /system/bin">ls /system/bin</button><button data-command="id">id</button></div>
+<div class="toolbar"><div><span id="light" class="light"></span><span id="status" role="status" aria-live="polite">Ready to start</span></div><div class="actions"><label for="memory">RAM</label><select id="memory"><option value="2048">2 GiB</option></select><button id="start">Start Android</button><button id="stop" disabled>Stop</button></div></div>
+<div class="stage"><p id="placeholder">Your Android display will appear here.</p><div id="display" aria-label="Interactive Android display"></div></div>
 </section>
 <p id="error" role="alert" hidden></p>
-<section class="details"><div><h2>What runs today</h2><p>Android 9 Bionic, mksh and Toybox on an emulated ARM64 CPU. The terminal connects directly to the guest shell. Closing or stopping the VM discards its changes.</p></div><div><h2>What comes next</h2><p>The Android launcher, apps and graphical framework are not running yet. Binder IPC is missing from the current kernel. This example is a userspace compatibility milestone.</p></div><div><h2>Browser requirements</h2><p>Use a current Chromium browser with WebAssembly JSPI. The first visit may reload once to enable browser isolation. No server runs your VM.</p></div></section>
-</main><footer><span>Built on <a href="https://github.com/pithings/unkernel">unkernel</a>. Android fixture from <a href="https://github.com/termux/termux-packages/tree/master/packages/aosp-utils">Termux</a>.</span><a href="./THIRD-PARTY.md">Licenses and attribution</a></footer>
+<section class="details"><div><h2>A full Android system</h2><p>LineageOS 20 / Android 13 on an emulated ARM64 CPU, with the Trebuchet launcher, Settings and software graphics. Click the display to interact. Stopping discards your session.</p></div><div><h2>Give it a few minutes</h2><p>Cold boot loads compressed system disks as needed and starts the Android framework. Keep this tab visible. The VM reserves 2 GiB of RAM and uses your device's CPU.</p></div><div><h2>Browser requirements</h2><p>Use a current Chromium browser with WebAssembly JSPI. The first visit may reload once to enable browser isolation. This initial demo runs offline.</p></div></section>
+</main><footer><span>Built on <a href="https://github.com/pithings/unkernel">unkernel</a>. Android images from <a href="https://waydro.id/">Waydroid</a>.</span><a href="./THIRD-PARTY.md">Licenses and attribution</a></footer>
 </body></html>

@@ -141,20 +141,23 @@ source in that repository and its npm package),
 
 ## Android browser example
 
-The Pages example includes xterm.js and its fit addon under the MIT license,
-and coi-serviceworker under the MIT license. Their license texts are copied to
-`licenses/` in the static site. Android Bionic, mksh and Toybox binaries come
-from Termux's `aosp-libs` and `aosp-utils` Android 9.0.0-r76-5 packages, pinned
-in `guest/android/pins.sh`. The package recipes and source locations are at
+The Pages example includes coi-serviceworker under the MIT license and
+[wland](https://github.com/pithings/wland) by Pooya Parsa under MPL-2.0 AND MIT,
+pinned to `0.1.0-261122-6617578`. Their license texts are copied into `licenses/`.
+The Wayland relay connects Android's hardware composer to the browser over vsock.
+
+Android 13 / LineageOS 20 system and vendor images come from the Waydroid project,
+pinned with source URLs and SHA-256 checksums in `guest/android/images.json`.
+They retain their original file notices and Android NOTICE files. Android and
+LineageOS source is available at <https://android.googlesource.com/>,
+<https://github.com/LineageOS> and <https://github.com/waydroid>.
+`pack-system.sh` removes unsupported 32-bit runtime libraries and older unused
+VNDK packages before EROFS compression; runtime configuration is applied only to
+the VM's disposable overlay.
+
+The separate Bionic compatibility fixture uses Termux's `aosp-libs` and
+`aosp-utils` Android 9.0.0-r76-5 packages pinned in `guest/android/pins.sh`.
+Recipes and source locations are at
 <https://github.com/termux/termux-packages/tree/master/packages/aosp-libs>
 and <https://github.com/termux/termux-packages/tree/master/packages/aosp-utils>.
-Bionic retains its BSD notices, mksh its MirOS notices, and Toybox its 0BSD
-notices in the upstream Android sources at <https://android.googlesource.com/>.
-The fixture contains only the small userspace compatibility tools; no Android
-system image is redistributed by this example.
-
-The full-system diagnostic runner uses [wland](https://github.com/pithings/wland)
-by Pooya Parsa, pinned to `0.1.0-261122-6617578`, for its real Wayland relay and
-headless compositor. The package is MPL-2.0 AND MIT and retains its upstream
-license notices. Its compositor connects to the guest over vsock; diagnostic
-screenshots are captured only when a real client window exists.
+Bionic retains its BSD notices, mksh its MirOS notices, and Toybox its 0BSD notices.

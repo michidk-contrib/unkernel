@@ -3,12 +3,14 @@
 # Copyright (C) 2026 Michael Lohr <michael@lohr.dev>
 # Runs inside the disposable unkernel guest, never on the host.
 set -eu
+format="${ANDROID_DISK_FORMAT:-ext4}"
+case "$format" in ext4|erofs) ;; *) echo "Unsupported Android disk format: $format" >&2; exit 1;; esac
 mkdir -p /android-lower /android-vendor-lower /android-rw /android
-mount -t ext4 -o ro /dev/wda /android-lower
+mount -t "$format" -o ro /dev/wda /android-lower
 mount -t tmpfs -o size=256m tmpfs /android-rw
 mkdir -p /android-rw/upper /android-rw/work
 mount -t overlay overlay -o lowerdir=/android-lower,upperdir=/android-rw/upper,workdir=/android-rw/work /android
-mount -t ext4 -o ro /dev/wdb /android-vendor-lower
+mount -t "$format" -o ro /dev/wdb /android-vendor-lower
 mkdir -p /android-rw/vendor-upper /android-rw/vendor-work
 mount -t overlay overlay -o lowerdir=/android-vendor-lower,upperdir=/android-rw/vendor-upper,workdir=/android-rw/vendor-work /android/vendor
 # The CPU implements AArch64, so advertise and start only that Android ABI.
@@ -59,10 +61,13 @@ done
 find /android/vendor/etc/vintf -type f -name '*.xml' | while IFS= read -r manifest; do
     sed -i -e '/<name>android.hardware.audio<\/name>/,/<\/hal>/s@<transport>hwbinder</transport>@<transport arch="64">passthrough</transport>@' -e '/<name>android.hardware.audio.effect<\/name>/,/<\/hal>/s@<transport>hwbinder</transport>@<transport arch="64">passthrough</transport>@' "$manifest"
 done
+# Physical service keychords are unused in this browser guest. Their init
+# scanner opens every /dev/input entry without O_NONBLOCK, including FIFOs.
 find /android/system/etc/init /android/vendor/etc/init -type f -name '*.rc' | while IFS= read -r rc; do
     awk '
         /^(service|on|import) / { skip = ($1 == "service" && $2 == "vendor.audio-hal") }
         skip { next }
+        $1 == "keycodes" { next }
         ($1 == "start" || $1 == "restart") && $2 == "vendor.audio-hal" { next }
         { print }
     ' "$rc" > "$rc.unkernel"

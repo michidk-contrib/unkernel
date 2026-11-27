@@ -4,11 +4,10 @@ An Android-focused fork of [pithings/unkernel](https://github.com/pithings/unker
 The target is a full Android system with its graphical interface running on the
 WebAssembly Linux kernel, initially through Node for bring-up and then in a browser.
 
-**Android does not boot to its graphical interface yet.** The first working
-milestone is Android Bionic userspace: the Android dynamic linker, mksh shell,
-Toybox commands, and child processes execute inside the AArch64 wasm guest.
-The pinned upstream kernel has no Android Binder IPC devices or binderfs, which
-blocks the framework and its system services.
+Android 13 / LineageOS 20 now completes boot on the Android kernel build and
+renders the Trebuchet launcher and Settings through Wayland. The full-system
+harness checks `sys.boot_completed=1`, real app activities and rendered pixels.
+The small Bionic fixture remains a separate kernel compatibility test.
 
 This is an independent clone on `feat/android`. Side by Side is unchanged.
 The upstream desktop/demo frontend, its assets, its pnpm workspace and lockfile,
@@ -86,28 +85,33 @@ code is copied into this fork.
 
 ## Browser demo and GitHub Pages
 
-The static demo boots the same real Android Bionic fixture and opens an
-interactive xterm.js terminal. It does not display the Android graphical
-interface. Choose 512 MiB, 1 GiB or 2 GiB before starting; Stop releases the VM,
-and starting again creates a fresh session. The demo currently has no network
-relay configured.
+The static demo boots the full Android 13 system and presents its Wayland display
+with wland, the same compositor used by Side by Side. The VM reserves 2 GiB of
+RAM. A cold boot takes several minutes, depending on the host CPU and disk
+fetches. Stop discards guest changes. The first browser version runs offline.
+
+The image workflow converts pinned Waydroid ARM64 system/vendor images to EROFS,
+retaining the 64-bit runtime and enforcing a 900 MB disk budget. The browser reads
+these disks with HTTP Range requests. The Pages build requires these artifacts
+and the Android kernel with Binder and BPF support:
 
 ```sh
-bun run android:prepare
 bun run check:pages
-bun run build:pages
+ANDROID_KERNEL=/path/to/android/unkernel.wasm \
+UNKERNEL_BUNDLE=/path/to/android/unkernel.wasm bun run build:pages
+bun run test:pages
 ```
 
-`dist-pages/` is the complete static site. All assets use relative URLs, so it
-works at a GitHub Pages project path as well as the domain root. The build
-preserves SDK module paths, packages the pinned Android filesystem with file
-modes and symlinks, and includes a checksum for the compressed fixture.
-A COI service worker provides isolation on Pages. Use a current Chromium browser
-with WebAssembly JSPI; the first visit can reload once to activate isolation.
+Place the compressed images and `images.json` in `vendor/android/web/` first.
+`test:pages` boots the exact packaged kernel and compressed disks, checks the
+launcher and Settings, and clicks Home through the Wayland pointer path.
 
-`.github/workflows/pages.yml` installs Bun and Node 24, prepares the verified
-fixture, checks types, runs the real Android VM integration test, builds the
-site, and deploys its artifact through GitHub Pages. It runs on pushes to
-`feat/android` and `main`, or manually. Enable Pages with **GitHub Actions** as
-the source, and allow the deployment branch in the `github-pages` environment.
-No kernel compilation or multi-gigabyte Android image download is needed.
+`dist-pages/` is the complete static site, with relative asset URLs for project
+paths. A COI service worker provides browser isolation on Pages. Use a current
+Chromium browser with WebAssembly JSPI; the first visit may reload once.
+
+The Pages workflow downloads the pinned kernel and compressed image artifacts,
+builds the static site, and runs the full Android boot/input check before upload.
+Enable Pages with **GitHub Actions** as the source and allow `feat/android` in the
+`github-pages` environment. The managed GitHub App cannot enable Pages in this
+repository; that setting requires the repository owner.
