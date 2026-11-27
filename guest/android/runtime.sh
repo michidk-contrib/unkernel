@@ -35,6 +35,8 @@ waydroid.background_start=false
 waydroid.stub_sensors_hal=true
 debug.hwui.renderer=skiagl
 debug.sf.nobootanimation=1
+# Eagerly compiling every compositor shader consumes minutes on the emulated CPU.
+service.sf.prime_shader_cache=0
 sys.use_memfd=true
 ro.hardware.audio.primary=default
 ro.sf.lcd_density=160
