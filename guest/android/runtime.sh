@@ -40,6 +40,21 @@ PROPERTIES
 for module in /android/vendor/lib64/hw/android.hardware.audio@4.0-impl.so /android/vendor/lib64/hw/android.hardware.audio.effect@4.0-impl.so /android/vendor/lib64/hw/audio.primary.default.so; do
     [ -f "$module" ] || { echo "Missing virtual audio module: $module" >&2; exit 1; }
 done
+# Audio normally runs in a vendor process. Its passthrough implementation needs
+# these VNDK libraries exposed to the same-process HAL linker namespace as well.
+vndk_audio_configured=false
+for apex in /android/system/apex/com.android.vndk.v*; do
+    [ -d "$apex" ] || continue
+    for list in "$apex"/etc/vndksp.libraries.*.txt; do
+        [ -f "$list" ] || continue
+        for library in libfmq.so libaudioutils.so; do
+            [ -f "$apex/lib64/$library" ] || { echo "Missing audio VNDK library: $library" >&2; exit 1; }
+            printf '\n%s\n' "$library" >> "$list"
+        done
+        vndk_audio_configured=true
+    done
+done
+[ "$vndk_audio_configured" = true ] || { echo 'Missing flattened audio VNDK configuration' >&2; exit 1; }
 find /android/vendor/etc/vintf -type f -name '*.xml' | while IFS= read -r manifest; do
     sed -i -e '/<name>android.hardware.audio<\/name>/,/<\/hal>/s@<transport>hwbinder</transport>@<transport arch="64">passthrough</transport>@' -e '/<name>android.hardware.audio.effect<\/name>/,/<\/hal>/s@<transport>hwbinder</transport>@<transport arch="64">passthrough</transport>@' "$manifest"
 done
