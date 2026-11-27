@@ -63,7 +63,7 @@ find /android/vendor/etc/vintf -type f -name '*.xml' | while IFS= read -r manife
 done
 # Physical service keychords are unused in this browser guest. Their init
 # scanner opens every /dev/input entry without O_NONBLOCK, including FIFOs.
-find /android/system/etc/init /android/vendor/etc/init -type f -name '*.rc' | while IFS= read -r rc; do
+find /android/system /android/vendor -type f -name '*.rc' | while IFS= read -r rc; do
     awk '
         /^(service|on|import) / { skip = ($1 == "service" && $2 == "vendor.audio-hal") }
         skip { next }
