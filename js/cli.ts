@@ -191,11 +191,12 @@ needs vsock. Half-closes pass through; a refused guest port resets the host
 connection.
 
 --wasi (prototype) runs the guest's WASI programs (wasm32-wasi .wasm files,
-preview 1 or 0, executable, run by path) on this host's wasm engine, each in
-a worker thread of its own: the guest's binfmt_misc hands them to kwwasi
-(/usr/lib/kw/kwwasi, a link to kwbox), which talks to the host over vsock
-port 1021 and does the program's file I/O in the guest, as that process;
-killing kwwasi ends the program. It needs vsock, and kwwasi registered in
+preview 1 or 0, executable, run by path; wasi-threads too) on this host's
+wasm engine, each in a worker thread of its own (one per wasm thread): the
+guest's binfmt_misc hands them to kwwasi (/usr/lib/kw/kwwasi, a link to
+kwbox), which talks to the host over vsock port 1021 and does the program's
+file and socket I/O in the guest, as that process; killing kwwasi ends the
+program. It needs vsock, and kwwasi registered in
 the guest (the kw layer's /usr/lib/kw/rc does it at boot, also in the base
 shell).
 
