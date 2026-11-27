@@ -43,7 +43,7 @@ done
 # Audio normally runs in a vendor process. Its passthrough implementation needs
 # these VNDK libraries exposed to the same-process HAL linker namespace as well.
 vndk_audio_configured=false
-for apex in /android/system/apex/com.android.vndk.v*; do
+for apex in /android/system/apex/com.android.vndk.*; do
     [ -d "$apex" ] || continue
     for list in "$apex"/etc/vndksp.libraries.*.txt; do
         [ -f "$list" ] || continue
