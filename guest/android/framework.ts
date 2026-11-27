@@ -52,7 +52,7 @@ exec chroot . /bin/sh -ec '
 	const result = await Promise.race([
 		drain.then(async () => ({ ended: await init.ended })),
 		vm.exec('/bin/sh', ['-ec', `
-for i in $(seq 300); do
+for i in $(seq 120); do
     children=$(cat /proc/${init.pid}/task/${init.pid}/children 2>/dev/null || true)
     for child in $children; do
         if [ "$(nsenter -t "$child" -m -p /system/bin/getprop sys.boot_completed 2>/dev/null)" = 1 ]; then
@@ -64,7 +64,7 @@ for i in $(seq 300); do
     sleep 2
 done
 exit 1
-`], { signal: AbortSignal.timeout(630000) }).then(readiness => ({ readiness })),
+`], { signal: AbortSignal.timeout(300000) }).then(readiness => ({ readiness })).catch(error => ({ readinessError: String(error) })),
 	]);
 	await writeFile(`${reports}/init.txt`, initOutput);
 	await writeFile(`${reports}/result.json`, JSON.stringify({ stage, ...result }, null, 2));
@@ -79,6 +79,8 @@ exit 1
 	await writeFile(`${reports}/properties.txt`, JSON.stringify(properties, null, 2));
 	const logcat = await vm.exec('/bin/nsenter', [...enter, '/system/bin/logcat', '-b', 'all', '-d', '-t', '10000'], { signal: AbortSignal.timeout(20000) });
 	await writeFile(`${reports}/logcat.txt`, JSON.stringify(logcat, null, 2));
+	const crashes = await vm.exec('/bin/nsenter', [...enter, '/system/bin/sh', '-c', 'for f in /data/tombstones/tombstone_*; do case "$f" in *.pb) continue;; esac; [ -f "$f" ] && cat "$f"; done'], { signal: AbortSignal.timeout(20000) });
+	await writeFile(`${reports}/native-crashes.txt`, JSON.stringify(crashes, null, 2));
 	const activity = await vm.exec('/bin/nsenter', [...enter, '/system/bin/dumpsys', 'activity', 'activities'], { signal: AbortSignal.timeout(20000) });
 	await writeFile(`${reports}/activities.txt`, JSON.stringify(activity, null, 2));
 	// An init process staying alive alone never establishes that Android booted.
