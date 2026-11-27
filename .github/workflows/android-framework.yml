@@ -42,12 +42,12 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: android-kernel
-          run-id: ${{ inputs.kernel_run || '46064949648' }}
+          run-id: ${{ inputs.kernel_run || '46067269891' }}
           github-token: ${{ github.token }}
           path: vendor/android/custom-kernel
       - name: Boot Android init and collect framework diagnostics
         env:
-          KERNEL_RUN: ${{ inputs.kernel_run || '46064949648' }}
+          KERNEL_RUN: ${{ inputs.kernel_run || '46067269891' }}
         run: |
           if [ -n "$KERNEL_RUN" ]; then
             export ANDROID_KERNEL="$PWD/vendor/android/custom-kernel/bundle/unkernel.wasm"

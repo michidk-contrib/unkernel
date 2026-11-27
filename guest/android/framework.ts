@@ -75,8 +75,8 @@ exec chroot . /bin/sh -ec '
 		try {
 			const threads = await vm.exec('/bin/nsenter', [...enter, '/system/bin/ps', '-AT', '-o', 'PID,TID,NAME,STAT,TIME,WCHAN'], { signal: AbortSignal.timeout(15000) });
 			await writeFile(`${reports}/threads.txt`, JSON.stringify(threads, null, 2));
-			const trace = await vm.exec('/bin/nsenter', [...enter, '/system/bin/sh', '-c', 'debuggerd -b "$(getprop init.svc_debug_pid.zygote)"'], { signal: AbortSignal.timeout(20000) });
-			await writeFile(`${reports}/zygote-stack.txt`, JSON.stringify(trace, null, 2));
+			const trace = await vm.exec('/bin/nsenter', [...enter, '/system/bin/sh', '-c', 'server=$(pidof system_server); if [ -n "$server" ]; then debuggerd -j "$server"; else debuggerd -b "$(getprop init.svc_debug_pid.zygote)"; fi'], { signal: AbortSignal.timeout(20000) });
+			await writeFile(`${reports}/framework-stack.txt`, JSON.stringify(trace, null, 2));
 		} catch (error) {
 			await writeFile(`${reports}/stack-error.txt`, String(error));
 		}

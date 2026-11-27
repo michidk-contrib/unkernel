@@ -30,6 +30,7 @@ ro.hardware.hwcomposer=waydroid
 waydroid.xdg_runtime_dir=/run/wayland
 waydroid.wayland_display=wayland-0
 waydroid.background_start=false
+waydroid.stub_sensors_hal=true
 debug.hwui.renderer=skiagl
 debug.sf.nobootanimation=1
 sys.use_memfd=true
