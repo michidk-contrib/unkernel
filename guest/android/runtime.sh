@@ -32,6 +32,13 @@ waydroid.wayland_display=wayland-0
 debug.hwui.renderer=skiagl
 sys.use_memfd=true
 PROPERTIES
+mkdir -p /dev/binderfs
+mount -t binder binder /dev/binderfs
+for device in binder hwbinder vndbinder; do
+    [ -c "/dev/binderfs/$device" ]
+    chmod 666 "/dev/binderfs/$device"
+    ln -s "binderfs/$device" "/dev/$device"
+done
 mount --rbind /dev /android/dev
 mkdir -p /android/dev/socket /android/dev/dm-user /android/dev/selinux
 mount --rbind /sys /android/sys
