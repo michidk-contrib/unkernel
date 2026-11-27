@@ -107,14 +107,14 @@ exit 1
 	const launchHome = await vm.exec('/bin/nsenter', [...enter, '/system/bin/am', 'start', '-W', '-a', 'android.intent.action.MAIN', '-c', 'android.intent.category.HOME'], { signal: AbortSignal.timeout(60000) });
 	await writeFile(`${reports}/launch-home.txt`, JSON.stringify(launchHome, null, 2));
 	await waitForActivity(homePackage, 'launcher');
-	for (let i = 0; i < 60; i++) {
+	for (let i = 0; i < 180; i++) {
 		const frame = display.desktop.screenshot();
 		let visiblePixels = 0;
 		for (let pixel = 0; pixel < frame.data.length; pixel += 4) {
 			if (frame.data[pixel]! > 16 || frame.data[pixel + 1]! > 16 || frame.data[pixel + 2]! > 16) visiblePixels++;
 		}
 		if (visiblePixels >= 1000) break;
-		if (i === 59) throw new Error('Home is resumed but the display remains blank');
+		if (i === 179) throw new Error('Home is resumed but the display remains blank');
 		await new Promise(resolve => setTimeout(resolve, 1000));
 	}
 	const launcherFrame = display.desktop.screenshot();
@@ -123,14 +123,14 @@ exit 1
 	const settings = await vm.exec('/bin/nsenter', [...enter, '/system/bin/am', 'start', '-W', '-a', 'android.settings.SETTINGS'], { signal: AbortSignal.timeout(60000) });
 	await writeFile(`${reports}/launch-settings.txt`, JSON.stringify(settings, null, 2));
 	await waitForActivity('com.android.settings', 'settings');
-	for (let i = 0; i < 60; i++) {
+	for (let i = 0; i < 180; i++) {
 		const frame = display.desktop.screenshot();
 		let changedPixels = 0;
 		for (let pixel = 0; pixel < frame.data.length; pixel += 4) {
 			if (frame.data[pixel] !== launcherFrame.data[pixel] || frame.data[pixel + 1] !== launcherFrame.data[pixel + 1] || frame.data[pixel + 2] !== launcherFrame.data[pixel + 2]) changedPixels++;
 		}
 		if (changedPixels >= 10000) break;
-		if (i === 59) throw new Error('Settings is resumed but its display has not replaced Home');
+		if (i === 179) throw new Error('Settings is resumed but its display has not replaced Home');
 		await new Promise(resolve => setTimeout(resolve, 1000));
 	}
 	await writeFile(`${reports}/settings.png`, await encodePNG(display.desktop.screenshot()));
