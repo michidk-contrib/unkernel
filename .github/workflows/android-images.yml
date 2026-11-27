@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: MIT
+# Copyright (C) 2026 Michael Lohr <michael@lohr.dev>
+name: Android image inspection
+on:
+  push:
+    branches: [feat/android]
+    paths: ['.github/workflows/android-images.yml', 'guest/android/prepare-system.py', 'guest/android/images.json']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 guest/android/prepare-system.py
+      - name: Inspect image root and Android boot configuration
+        run: |
+          mkdir -p vendor/android/reports
+          for name in system vendor; do
+            for path in / /system /apex /system/apex /etc/init /system/etc/init /bin /system/bin; do
+              echo "=== $name $path ==="
+              debugfs -R "ls -l $path" "vendor/android/system/$name.img" 2>&1
+            done > "vendor/android/reports/$name-tree.txt"
+          done
+          debugfs -R 'cat /system/etc/init/hw/init.rc' vendor/android/system/system.img > vendor/android/reports/init.rc 2>&1
+          debugfs -R 'cat /etc/init/hw/init.waydroid.rc' vendor/android/system/vendor.img > vendor/android/reports/init.waydroid.rc 2>&1
+          debugfs -R 'cat /build.prop' vendor/android/system/vendor.img > vendor/android/reports/vendor-build.prop 2>&1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-image-reports
+          path: vendor/android/reports
