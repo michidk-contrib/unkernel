@@ -4,6 +4,7 @@ import { mkdir, writeFile, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { createKernel } from '../../js/node.ts';
 import { startAndroidDisplay } from './display.ts';
+import { encodePNG } from 'wland/headless';
 
 const root = resolve(import.meta.dirname, '../..');
 const reports = resolve(root, 'vendor/android/framework-reports');
@@ -97,6 +98,36 @@ exit 1
 		}
 		throw new Error('Android has not reported sys.boot_completed=1; inspect framework reports');
 	}
+	stage = 'launcher';
+	const home = await vm.exec('/bin/nsenter', [...enter, '/system/bin/cmd', 'package', 'resolve-activity', '--brief', '-a', 'android.intent.action.MAIN', '-c', 'android.intent.category.HOME'], { signal: AbortSignal.timeout(30000) });
+	await writeFile(`${reports}/home-activity.txt`, JSON.stringify(home, null, 2));
+	const homeComponent = home.stdout.trim().split('\n').at(-1) ?? '';
+	if (home.exitCode !== 0 || !/^[\w.]+\/[\w.$]+$/.test(homeComponent)) throw new Error('Android has no resolvable Home activity');
+	const homePackage = homeComponent.slice(0, homeComponent.indexOf('/'));
+	const waitForActivity = async (packageName: string, name: string) => {
+		for (let i = 0; i < 30; i++) {
+			const current = await vm.exec('/bin/nsenter', [...enter, '/system/bin/dumpsys', 'activity', 'activities'], { signal: AbortSignal.timeout(15000) });
+			await writeFile(`${reports}/${name}.txt`, JSON.stringify(current, null, 2));
+			if (current.stdout.split('\n').some(line => /(?:mResumedActivity|topResumedActivity):/.test(line) && line.includes(`${packageName}/`))) return;
+			await new Promise(resolve => setTimeout(resolve, 1000));
+		}
+		throw new Error(`${packageName} did not become the resumed Android activity`);
+	};
+	const launchHome = await vm.exec('/bin/nsenter', [...enter, '/system/bin/am', 'start', '-W', '-a', 'android.intent.action.MAIN', '-c', 'android.intent.category.HOME'], { signal: AbortSignal.timeout(60000) });
+	await writeFile(`${reports}/launch-home.txt`, JSON.stringify(launchHome, null, 2));
+	await waitForActivity(homePackage, 'launcher');
+	await new Promise(resolve => setTimeout(resolve, 5000));
+	await writeFile(`${reports}/launcher.png`, await encodePNG(display.desktop.screenshot()));
+	stage = 'input';
+	const settings = await vm.exec('/bin/nsenter', [...enter, '/system/bin/am', 'start', '-W', '-a', 'android.settings.SETTINGS'], { signal: AbortSignal.timeout(60000) });
+	await writeFile(`${reports}/launch-settings.txt`, JSON.stringify(settings, null, 2));
+	await waitForActivity('com.android.settings', 'settings');
+	await new Promise(resolve => setTimeout(resolve, 5000));
+	await writeFile(`${reports}/settings.png`, await encodePNG(display.desktop.screenshot()));
+	// Exercise the same pointer path as the browser, through Wayland and InputFlinger.
+	display.desktop.click(360, 1250);
+	await waitForActivity(homePackage, 'home-after-pointer');
+	await writeFile(`${reports}/input-verified.txt`, 'Wayland pointer click on Home returned from Settings to the launcher.\n');
 } catch (error) {
 	await writeFile(`${reports}/error.txt`, `${stage}: ${error instanceof Error ? error.stack : error}`);
 	process.exitCode = 1;

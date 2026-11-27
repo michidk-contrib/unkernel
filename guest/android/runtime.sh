@@ -47,7 +47,7 @@ for apex in /android/system/apex/com.android.vndk.*; do
     [ -d "$apex" ] || continue
     for list in "$apex"/etc/vndksp.libraries.*.txt; do
         [ -f "$list" ] || continue
-        for library in libfmq.so libaudioutils.so; do
+        for library in libfmq.so libaudioutils.so libmedia_helper.so libtinyxml2.so; do
             [ -f "$apex/lib64/$library" ] || { echo "Missing audio VNDK library: $library" >&2; exit 1; }
             printf '\n%s\n' "$library" >> "$list"
         done
