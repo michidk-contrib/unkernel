@@ -4,7 +4,7 @@ name: Android framework bring-up
 on:
   push:
     branches: [feat/android]
-    paths: ['.github/workflows/android-framework.yml', 'guest/android/framework.ts', 'guest/android/runtime.sh']
+    paths: ['.github/workflows/android-framework.yml', 'guest/android/framework.ts', 'guest/android/runtime.sh', 'guest/android/display.ts']
   workflow_dispatch:
     inputs:
       kernel_run:

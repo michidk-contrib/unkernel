@@ -152,3 +152,9 @@ Bionic retains its BSD notices, mksh its MirOS notices, and Toybox its 0BSD
 notices in the upstream Android sources at <https://android.googlesource.com/>.
 The fixture contains only the small userspace compatibility tools; no Android
 system image is redistributed by this example.
+
+The full-system diagnostic runner uses [wland](https://github.com/pithings/wland)
+by Pooya Parsa, pinned to `0.1.0-261122-6617578`, for its real Wayland relay and
+headless compositor. The package is MPL-2.0 AND MIT and retains its upstream
+license notices. Its compositor connects to the guest over vsock; diagnostic
+screenshots are captured only when a real client window exists.

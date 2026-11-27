@@ -33,3 +33,10 @@ ls -l /android/init /android/system/bin/init /android/system/bin/bootstrap
 cat /proc/filesystems
 cat /android/system/etc/init/init.waydroid.rc
 cat /android/vendor/etc/init/init.waydroid.vendor.rc
+
+printf '\nAvailable Android graphics modules\n'
+for dir in /android/vendor/lib64/hw /android/vendor/lib64/egl; do
+    if [ -d "$dir" ]; then ls -l "$dir"; else echo "$dir is not provided"; fi
+done
+printf '\nAndroid host user mapping\n'
+if [ -f /android/vendor/etc/passwd ]; then cat /android/vendor/etc/passwd; fi

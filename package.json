@@ -82,7 +82,8 @@
     "@xterm/xterm": "^6.0.0",
     "coi-serviceworker": "^0.1.7",
     "obuild": "^0.4.45",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "wland": "0.1.0-261122-6617578"
   },
   "packageManager": "bun@1.4.4",
   "private": true

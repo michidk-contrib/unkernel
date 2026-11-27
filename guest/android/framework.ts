@@ -3,6 +3,7 @@
 import { mkdir, writeFile, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { createKernel } from '../../js/node.ts';
+import { startAndroidDisplay } from './display.ts';
 
 const root = resolve(import.meta.dirname, '../..');
 const reports = resolve(root, 'vendor/android/framework-reports');
@@ -11,6 +12,7 @@ const kernel = process.env.ANDROID_KERNEL ?? resolve(root, 'vendor/android/unker
 const cmdline = 'console=hvc0 rdinit=/init loglevel=7 printk.devkmsg=on androidboot.hardware=waydroid androidboot.selinux=permissive androidboot.serialno=unkernel';
 const vm = await createKernel({
 	kernel, cmdline, memoryMiB: 2048, cpus: 1,
+	gpu: true, display: { width: 720, height: 1280 },
 	disks: [
 		{ kind: 'file', path: resolve(root, 'vendor/android/system/system.img'), readOnly: true },
 		{ kind: 'file', path: resolve(root, 'vendor/android/system/vendor.img'), readOnly: true },
@@ -21,13 +23,16 @@ let consoleOutput = '';
 vm.onOutput(bytes => { consoleOutput = (consoleOutput + new TextDecoder().decode(bytes)).slice(-4_000_000); });
 const watchdog = setTimeout(() => void vm.stop(), 240000);
 let stage = 'mount';
+let display: Awaited<ReturnType<typeof startAndroidDisplay>> | undefined;
 try {
 	const setupScript = await readFile(new URL('./runtime.sh', import.meta.url), 'utf8');
 	const setup = await vm.exec('/bin/sh', ['-ec', setupScript], { signal: AbortSignal.timeout(60000) });
 	await writeFile(`${reports}/mount.txt`, JSON.stringify(setup, null, 2));
 	if (setup.exitCode !== 0) throw new Error(`System image mount failed: ${setup.stderr}`);
+	stage = 'display';
+	display = await startAndroidDisplay(vm, reports);
 	stage = 'init';
-	const init = await vm.spawn('/bin/unshare', ['-m', '-p', '-f', '--mount-proc=/android/proc', '/bin/chroot', '/android', '/system/bin/init', 'second_stage'], { pty: false });
+	const init = await vm.spawn('/bin/unshare', ['-m', '-p', '-f', '--mount-proc=/android/proc', '/bin/chroot', '/android', '/system/bin/init', 'second_stage'], { pty: false, env: display.env });
 	let initOutput = '';
 	const read = async (stream: ReadableStream<Uint8Array>) => {
 		for await (const bytes of stream) initOutput = (initOutput + new TextDecoder().decode(bytes)).slice(-4_000_000);
@@ -59,6 +64,8 @@ try {
 	process.exitCode = 1;
 } finally {
 	clearTimeout(watchdog);
+	await display?.capture().catch(error => writeFile(`${reports}/display-error.txt`, String(error)));
+	await display?.close().catch(() => {});
 	await writeFile(`${reports}/console.txt`, consoleOutput);
 	await vm.stop();
 }
