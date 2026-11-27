@@ -1,0 +1,30 @@
+From 35c9f2ac6714b61b98598cc2c0da9cc5208a188d Mon Sep 17 00:00:00 2001
+From: "vibepodml[bot]" <vibepodml[bot]@users.noreply.github.com>
+Date: Fri, 27 Nov 2026 20:59:11 +0000
+Subject: [PATCH] wasm: allow unaligned accesses in BPF programs
+
+WebAssembly scalar memory accesses support unaligned addresses. Advertise this architecture capability so the BPF verifier accepts Android tethering programs that read IPv6 fields after the Ethernet header, whose two-byte offset otherwise causes a false misaligned-access rejection.
+
+SPDX-License-Identifier: GPL-2.0-only
+
+Co-authored-by: Michael Lohr <michael@lohr.dev>
+Co-authored-by: Codex <codex@openai.com>
+---
+ arch/wasm/Kconfig | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/arch/wasm/Kconfig b/arch/wasm/Kconfig
+index ec1eda8..fc09595 100644
+--- a/arch/wasm/Kconfig
++++ b/arch/wasm/Kconfig
+@@ -23,6 +23,7 @@ config WASM
+ 	select HAVE_ARCH_SECCOMP_FILTER
+ 	# ptrace's regsets (arm64's), PTRACE_GET_SYSCALL_INFO, /proc/PID/syscall
+ 	select HAVE_ARCH_TRACEHOOK
++	select HAVE_EFFICIENT_UNALIGNED_ACCESS
+ 	select HAVE_VIRT_CPU_ACCOUNTING_GEN
+ 	select HAVE_CONTEXT_TRACKING_USER
+ 
+-- 
+2.56.0
+
