@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Copyright (C) 2026 Michael Lohr <michael@lohr.dev>
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, writeFile, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { createKernel } from '../../js/node.ts';
 
@@ -22,29 +22,8 @@ vm.onOutput(bytes => { consoleOutput = (consoleOutput + new TextDecoder().decode
 const watchdog = setTimeout(() => void vm.stop(), 240000);
 let stage = 'mount';
 try {
-	const setup = await vm.exec('/bin/sh', ['-ec', `
-mkdir -p /android-lower /android-rw /android
-mount -t ext4 -o ro /dev/wda /android-lower
-mount -t tmpfs -o size=256m tmpfs /android-rw
-mkdir -p /android-rw/upper /android-rw/work
-mount -t overlay overlay -o lowerdir=/android-lower,upperdir=/android-rw/upper,workdir=/android-rw/work /android
-mount -t ext4 -o ro /dev/wdb /android/vendor
-mount --rbind /dev /android/dev
-mkdir -p /android/dev/socket /android/dev/dm-user /android/dev/selinux
-mount --rbind /sys /android/sys
-mount -t proc proc /android/proc
-mount -t tmpfs -o size=512m,mode=0771,uid=1000,gid=1000 tmpfs /android/data
-mount -t tmpfs -o mode=0755 tmpfs /android/linkerconfig
-mount -t tmpfs -o mode=0755 tmpfs /android/apex
-mount -t tmpfs -o mode=0755 tmpfs /android/mnt
-mkdir -p /android/mnt/vendor /android/mnt/product
-mount -t tmpfs tmpfs /android/debug_ramdisk
-mount -t tmpfs tmpfs /android/second_stage_resources
-ls -l /android/init /android/system/bin/init /android/system/bin/bootstrap
-cat /proc/filesystems
-cat /android/system/etc/init/init.waydroid.rc
-cat /android/vendor/etc/init/init.waydroid.vendor.rc
-`], { signal: AbortSignal.timeout(60000) });
+	const setupScript = await readFile(new URL('./runtime.sh', import.meta.url), 'utf8');
+	const setup = await vm.exec('/bin/sh', ['-ec', setupScript], { signal: AbortSignal.timeout(60000) });
 	await writeFile(`${reports}/mount.txt`, JSON.stringify(setup, null, 2));
 	if (setup.exitCode !== 0) throw new Error(`System image mount failed: ${setup.stderr}`);
 	stage = 'init';

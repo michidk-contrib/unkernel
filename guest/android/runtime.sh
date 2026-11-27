@@ -1,0 +1,35 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (C) 2026 Michael Lohr <michael@lohr.dev>
+# Runs inside the disposable unkernel guest, never on the host.
+set -eu
+mkdir -p /android-lower /android-vendor-lower /android-rw /android
+mount -t ext4 -o ro /dev/wda /android-lower
+mount -t tmpfs -o size=256m tmpfs /android-rw
+mkdir -p /android-rw/upper /android-rw/work
+mount -t overlay overlay -o lowerdir=/android-lower,upperdir=/android-rw/upper,workdir=/android-rw/work /android
+mount -t ext4 -o ro /dev/wdb /android-vendor-lower
+mkdir -p /android-rw/vendor-upper /android-rw/vendor-work
+mount -t overlay overlay -o lowerdir=/android-vendor-lower,upperdir=/android-rw/vendor-upper,workdir=/android-rw/vendor-work /android/vendor
+# The CPU implements AArch64, so advertise and start only that Android ABI.
+find /android/system /android/vendor -type f \( -name build.prop -o -name prop.default -o -name default.prop \) | while IFS= read -r prop; do
+    sed -i -e 's/^\(ro\..*cpu\.abilist\)=.*/\1=arm64-v8a/' -e 's/^\(ro\..*cpu\.abilist32\)=.*/\1=/' -e 's/^ro.zygote=.*/ro.zygote=zygote64/' "$prop"
+done
+if [ ! -f /android/system/etc/init/hw/init.zygote64.rc ]; then
+    awk '/^service zygote_secondary / {exit} !/restart zygote_secondary/ {print}' /android/system/etc/init/hw/init.zygote64_32.rc > /android/system/etc/init/hw/init.zygote64.rc
+fi
+mount --rbind /dev /android/dev
+mkdir -p /android/dev/socket /android/dev/dm-user /android/dev/selinux
+mount --rbind /sys /android/sys
+mount -t proc proc /android/proc
+mount -t tmpfs -o size=512m,mode=0771,uid=1000,gid=1000 tmpfs /android/data
+mount -t tmpfs -o mode=0755 tmpfs /android/linkerconfig
+mount -t tmpfs -o mode=0755 tmpfs /android/apex
+mount -t tmpfs -o mode=0755 tmpfs /android/mnt
+mkdir -p /android/mnt/vendor /android/mnt/product
+mount -t tmpfs tmpfs /android/debug_ramdisk
+mount -t tmpfs tmpfs /android/second_stage_resources
+ls -l /android/init /android/system/bin/init /android/system/bin/bootstrap
+cat /proc/filesystems
+cat /android/system/etc/init/init.waydroid.rc
+cat /android/vendor/etc/init/init.waydroid.vendor.rc
