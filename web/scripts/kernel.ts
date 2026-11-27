@@ -201,7 +201,7 @@ const mib = (n: number) => `${(n / 1048576).toFixed(1)} MiB`;
 /** `f` relative to the repository (absolute outside it), for messages. */
 const rel = (f: string) => { const r = path.relative(ROOT, f); return r.startsWith("..") ? f : r || "."; };
 const isFile = async (f: string) => { try { return (await stat(f)).isFile(); } catch { return false; } };
-const banner = (bytes: Uint8Array) => /Linux version (\S+)/.exec(Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString("latin1"))?.[1] ?? "";
+export const banner = (bytes: Uint8Array) => /Linux version (\S+)/.exec(Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString("latin1"))?.[1] ?? "";
 /** Debian first (the default), then by name. */
 const byName = (a: { name: string }, b: { name: string }) => (a.name === "debian" ? -1 : b.name === "debian" ? 1 : a.name.localeCompare(b.name));
 
@@ -229,7 +229,7 @@ async function wantAbi(): Promise<number> {
 }
 
 /** A base bundle's kwemu ABI and base id (kernel/tools/bundle.mjs, guest/tools/distros-json.mjs). */
-async function bundleInfo(bytes: Uint8Array): Promise<{ abi: number | null; base: string | null }> {
+export async function bundleInfo(bytes: Uint8Array): Promise<{ abi: number | null; base: string | null }> {
 	const { bundleInfo } = (await import(new URL("../../guest/tools/distros-json.mjs", import.meta.url).href)) as {
 		bundleInfo(wasm: Uint8Array): { abi: number | null; base: string | null };
 	};

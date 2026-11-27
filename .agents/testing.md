@@ -172,7 +172,9 @@ of the step). A release publishes the tarball to npm and a GitHub release
 tarball, `unkernel.wasm`, `distros.json` and the images it names
 (`alpine.erofs`, `debian.erofs`; not the `.ext4`, `.tar` or `.id` files),
 which the package's `fetchDistro()` and the page's build
-(web.md, The page's kernel and distro images) download. The build steps
+(web.md, The page's kernel and distro images) download, plus the page's
+own files for loading them from a CORS mirror (`unkernel-up.wasm`,
+`unkernel-smp.wasm` and `page.json`: `web/scripts/page-assets.ts`). The build steps
 are `kernel/build.sh all`'s, split so that each cache is saved after its
 part. Re-running a release skips what exists (the tag, the npm version)
 and uploads only the assets an existing GitHub release lacks, publishing
