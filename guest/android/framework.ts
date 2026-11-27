@@ -143,9 +143,13 @@ exit 1
 	for (let i = 0; i < 60; i++) {
 		const current = await vm.exec('/bin/nsenter', [...enter, '/system/bin/dumpsys', 'activity', 'activities'], { signal: AbortSignal.timeout(15000) });
 		await writeFile(`${reports}/network-after-pointer.txt`, JSON.stringify(current, null, 2));
-		if (current.stdout.split('\n').some(line => /(?:mResumedActivity|topResumedActivity)[:=]/.test(line) && line.includes('com.android.settings/.Settings$NetworkDashboardActivity'))) {
-			networkOpened = true;
-			break;
+		if (current.stdout.split('\n').some(line => /(?:mResumedActivity|topResumedActivity)[:=]/.test(line) && line.includes('com.android.settings/.SubSettings'))) {
+			const page = await vm.exec('/bin/nsenter', [...enter, '/system/bin/dumpsys', '-t', '60', 'activity', 'com.android.settings/.SubSettings'], { signal: AbortSignal.timeout(90000) });
+			await writeFile(`${reports}/network-fragment.txt`, JSON.stringify(page, null, 2));
+			if (page.stdout.includes('NetworkDashboardFragment')) {
+				networkOpened = true;
+				break;
+			}
 		}
 		await new Promise(resolve => setTimeout(resolve, 1000));
 	}
