@@ -30,6 +30,7 @@ ro.hardware.hwcomposer=waydroid
 waydroid.xdg_runtime_dir=/run/wayland
 waydroid.wayland_display=wayland-0
 debug.hwui.renderer=skiagl
+sys.use_memfd=true
 PROPERTIES
 mount --rbind /dev /android/dev
 mkdir -p /android/dev/socket /android/dev/dm-user /android/dev/selinux
