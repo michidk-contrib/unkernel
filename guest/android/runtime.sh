@@ -76,6 +76,11 @@ for device in binder hwbinder vndbinder; do
     chmod 666 "/dev/binderfs/$device"
     ln -s "binderfs/$device" "/dev/$device"
 done
+mkdir -p /dev/input
+for input in touch keyboard pointer tablet; do
+    pipe="/dev/input/wl_${input}_events"
+    [ -p "$pipe" ] || mkfifo -m 666 "$pipe"
+done
 mount --rbind /dev /android/dev
 mkdir -p /android/dev/socket /android/dev/dm-user /android/dev/selinux
 mount --rbind /sys /android/sys
