@@ -105,7 +105,7 @@ exit 1
 		}
 		throw new Error(`${packageName} did not become the resumed Android activity`);
 	};
-	const launchHome = await vm.exec('/bin/nsenter', [...enter, '/system/bin/am', 'start', '-W', '-a', 'android.intent.action.MAIN', '-c', 'android.intent.category.HOME'], { signal: AbortSignal.timeout(60000) });
+	const launchHome = await vm.exec('/bin/nsenter', [...enter, '/system/bin/am', 'start', '-a', 'android.intent.action.MAIN', '-c', 'android.intent.category.HOME'], { signal: AbortSignal.timeout(60000) });
 	await writeFile(`${reports}/launch-home.txt`, JSON.stringify(launchHome, null, 2));
 	await waitForActivity(homePackage, 'launcher');
 	for (let i = 0; i < 180; i++) {
@@ -121,7 +121,7 @@ exit 1
 	const launcherFrame = display.desktop.screenshot();
 	await writeFile(`${reports}/launcher.png`, await encodePNG(launcherFrame));
 	stage = 'input';
-	const settings = await vm.exec('/bin/nsenter', [...enter, '/system/bin/am', 'start', '-W', '-a', 'android.settings.SETTINGS'], { signal: AbortSignal.timeout(60000) });
+	const settings = await vm.exec('/bin/nsenter', [...enter, '/system/bin/am', 'start', '-a', 'android.settings.SETTINGS'], { signal: AbortSignal.timeout(60000) });
 	await writeFile(`${reports}/launch-settings.txt`, JSON.stringify(settings, null, 2));
 	await waitForActivity('com.android.settings', 'settings');
 	for (let i = 0; i < 180; i++) {
