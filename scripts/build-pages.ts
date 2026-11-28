@@ -13,6 +13,8 @@ const out = resolve(root, 'dist-pages');
 const images = resolve(root, 'vendor/android/web');
 const kernel = process.env.ANDROID_KERNEL;
 if (!kernel) throw new Error('Set ANDROID_KERNEL to the verified Binder/BPF Android kernel bundle');
+const launcher = `${root}/vendor/android/launcher/home.apk`;
+try { await stat(launcher); } catch { throw new Error('Build Browser Home first: bash guest/android/launcher/build.sh (requires JDK 17 and ANDROID_HOME)'); }
 await rm(out, { recursive: true, force: true });
 await mkdir(`${out}/runtime/_chunks`, { recursive: true });
 await mkdir(`${out}/android`, { recursive: true });
@@ -23,6 +25,7 @@ await cp(`${root}/node_modules/coi-serviceworker/coi-serviceworker.js`, `${out}/
 await mkdir(`${out}/licenses`, { recursive: true });
 for (const name of ['wland', 'coi-serviceworker']) await cp(`${root}/node_modules/${name}/LICENSE`, `${out}/licenses/${name}.txt`);
 for (const file of ['runtime.sh', 'start-init.sh']) await cp(`${root}/guest/android/${file}`, `${out}/android/${file}`);
+await cp(launcher, `${out}/android/home.apk`);
 await cp(`${images}/images.json`, `${out}/android/images.json`);
 const manifest: unknown = JSON.parse(await readFile(`${images}/images.json`, 'utf8'));
 if (!manifest || typeof manifest !== 'object' || !('format' in manifest) || manifest.format !== 'erofs' || !('images' in manifest) || !manifest.images || typeof manifest.images !== 'object') throw new Error('Invalid Android EROFS manifest');
@@ -45,6 +48,7 @@ await cp(`${root}/node_modules/wland/dist/wland.wasm`, `${out}/wland.wasm`);
 const result = await Bun.build({ entrypoints: [`${root}/pages/main.ts`], outdir: out, target: 'browser', minify: true, naming: '[name].[ext]' });
 if (!result.success) throw new AggregateError(result.logs, 'Pages build failed');
 for (const file of ['index.html', 'style.css']) await cp(`${root}/pages/${file}`, `${out}/${file}`);
+await cp(`${root}/pages/fonts`, `${out}/fonts`, { recursive: true });
 await Bun.write(`${out}/.nojekyll`, '');
 await Bun.write(`${out}/android/kernel.sha256`, createHash('sha256').update(await readFile(kernel)).digest('hex'));
 const identity = await seedIdentity(`${out}/android`, kernel, `${images}/images.json`);

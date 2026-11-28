@@ -13,6 +13,19 @@ mount -t overlay overlay -o lowerdir=/android-lower,upperdir=/android-rw/upper,w
 mount -t "$format" -o ro /dev/wdb /android-vendor-lower
 mkdir -p /android-rw/vendor-upper /android-rw/vendor-work
 mount -t overlay overlay -o lowerdir=/android-vendor-lower,upperdir=/android-rw/vendor-upper,workdir=/android-rw/vendor-work /android/vendor
+# Minimal browser profile. These overlay whiteouts prevent optional apps from
+# being scanned or started. The immutable downloaded image is unchanged.
+for app in BasicDreams EasterEgg NfcNci PrintRecommendationService PrintSpooler WallpaperBackup; do
+    rm -rf "/android/system/app/$app"
+done
+for app in Aperture ApertureLensLauncher Backgrounds DeskClock Etar Gallery2 LocalContactsBackup PhotoTable Recorder; do
+    rm -rf "/android/system/product/app/$app"
+done
+for app in TrebuchetQuickStep ThemePicker WaydroidUpdater Seedvault; do
+    rm -rf "/android/system/system_ext/priv-app/$app"
+done
+rm -rf /android/system/priv-app/LiveWallpapersPicker /android/system/product/overlay/TrebuchetOverlay.apk
+mkdir -p /android/system/app/BrowserHome
 # The CPU implements AArch64, so advertise and start only that Android ABI.
 find /android/system /android/vendor -type f \( -name build.prop -o -name prop.default -o -name default.prop \) | while IFS= read -r prop; do
     sed -i -e 's/^\(ro\..*cpu\.abilist\)=.*/\1=arm64-v8a/' -e 's/^\(ro\..*cpu\.abilist32\)=.*/\1=/' -e 's/^ro.zygote=.*/ro.zygote=zygote64/' "$prop"
@@ -34,6 +47,8 @@ waydroid.wayland_display=wayland-0
 waydroid.background_start=false
 waydroid.stub_sensors_hal=true
 debug.hwui.renderer=skiagl
+# A plain color background and no wallpaper animation in Browser Home.
+ro.config.low_ram=true
 debug.sf.nobootanimation=1
 # Eagerly compiling every compositor shader consumes minutes on the emulated CPU.
 service.sf.prime_shader_cache=0
@@ -65,16 +80,26 @@ done
 find /android/vendor/etc/vintf -type f -name '*.xml' | while IFS= read -r manifest; do
     sed -i -e '/<name>android.hardware.audio<\/name>/,/<\/hal>/s@<transport>hwbinder</transport>@<transport arch="64">passthrough</transport>@' -e '/<name>android.hardware.audio.effect<\/name>/,/<\/hal>/s@<transport>hwbinder</transport>@<transport arch="64">passthrough</transport>@' "$manifest"
 done
+# The ARM64-only guest cannot execute the image's remaining 32-bit system/HAL
+# binaries. Leaving their services enabled makes init respawn them indefinitely.
+: > /tmp/android-unsupported-services
+find /android/system/bin /android/vendor/bin -type f | while IFS= read -r binary; do
+    header=$(/bin/busybox od -An -tx1 -N5 "$binary")
+    case "$header" in
+        *'7f 45 4c 46 01'*) printf '%s\n' "${binary#/android}" >> /tmp/android-unsupported-services ;;
+    esac
+done
 # Physical service keychords are unused in this browser guest. Their init
 # scanner opens every /dev/input entry without O_NONBLOCK, including FIFOs.
 find /android/system /android/vendor -type f -name '*.rc' | while IFS= read -r rc; do
     awk '
-        /^(service|on|import) / { skip = ($1 == "service" && $2 == "vendor.audio-hal") }
+        FILENAME == ARGV[1] { unsupported[$0] = 1; next }
+        /^(service|on|import) / { skip = ($1 == "service" && ($2 == "vendor.audio-hal" || $3 in unsupported)) }
         skip { next }
         $1 == "keycodes" { next }
         ($1 == "start" || $1 == "restart") && $2 == "vendor.audio-hal" { next }
         { print }
-    ' "$rc" > "$rc.unkernel"
+    ' /tmp/android-unsupported-services "$rc" > "$rc.unkernel"
     cat "$rc.unkernel" > "$rc"
     rm "$rc.unkernel"
 done

@@ -13,7 +13,7 @@ import type { SeedManifest } from '../guest/android/seed-assets.ts';
 async function fixture(t: { after(callback: () => Promise<void>): void }) {
 	const directory = await mkdtemp(join(tmpdir(), 'android-seed-'));
 	t.after(() => rm(directory, { recursive: true, force: true }));
-	const files = ['kernel.wasm', 'runtime.sh', 'start-init.sh', 'images.json'];
+	const files = ['kernel.wasm', 'runtime.sh', 'start-init.sh', 'home.apk', 'images.json'];
 	for (const file of files) await writeFile(join(directory, file), file);
 	const identity = await seedIdentity(directory, join(directory, 'kernel.wasm'), join(directory, 'images.json'));
 	const data = gzipSync(Buffer.from('prepared Android data'));
@@ -32,7 +32,7 @@ test('prepared data returns the verified manifest and exact archive bytes', asyn
 
 test('changing any runtime, kernel or image manifest invalidates prepared data', async t => {
 	const f = await fixture(t);
-	for (const file of ['kernel.wasm', 'runtime.sh', 'start-init.sh', 'images.json']) {
+	for (const file of ['kernel.wasm', 'runtime.sh', 'start-init.sh', 'home.apk', 'images.json']) {
 		await writeFile(join(f.directory, file), `${file} changed`);
 		const identity = await seedIdentity(f.directory, join(f.directory, 'kernel.wasm'), join(f.directory, 'images.json'));
 		assert.notEqual(identity, f.identity, file);

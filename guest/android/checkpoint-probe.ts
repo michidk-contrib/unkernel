@@ -51,6 +51,7 @@ const exportSeed = async () => {
 };
 try {
 	await exec(await readFile(resolve(assets, 'android/runtime.sh'), 'utf8'));
+	await exec('cat > /android/system/app/BrowserHome/BrowserHome.apk; chmod 644 /android/system/app/BrowserHome/BrowserHome.apk', await readFile(resolve(assets, 'android/home.apk')));
 	if (process.env.ANDROID_DATA_SEED) {
 		const identity = await seedIdentity(resolve(assets, 'android'), options.kernel, resolve(root, 'vendor/android/web/images.json'));
 		const seed = await readSeed(process.env.ANDROID_DATA_SEED, identity);
@@ -69,7 +70,7 @@ try {
 	namespaceChild = child;
 	note(`Boot complete, namespace ${child}, windows ${desktop.windows().length}`);
 	await exec(`nsenter -t ${child} -m -p /system/bin/am start -a android.intent.action.MAIN -c android.intent.category.HOME`);
-	await exec(`for i in $(seq 60); do if nsenter -t ${child} -m -p /system/bin/dumpsys activity activities | grep -q 'topResumedActivity.*com.android.launcher3/'; then exit 0; fi; sleep 1; done; exit 1`);
+	await exec(`for i in $(seq 60); do if nsenter -t ${child} -m -p /system/bin/dumpsys activity activities | grep -q 'topResumedActivity.*dev.unkernel.home/'; then exit 0; fi; sleep 1; done; exit 1`);
 	await waitForPixels();
 	homeDrawn = true;
 	// Closing lmkd's PSI trigger descriptors destroys the non-parkable psimon kthread.

@@ -146,6 +146,9 @@ The Pages example includes coi-serviceworker under the MIT license and
 pinned to `0.1.0-261122-6617578`. Their license texts are copied into `licenses/`.
 The Wayland relay connects Android's hardware composer to the browser over vsock.
 
+The Android example uses Manrope by Mikhail Sharanda and Mirko Velimirovic under
+the SIL Open Font License 1.1. Its font files and license are served in `fonts/`.
+
 Android 13 / LineageOS 20 system and vendor images come from the Waydroid project,
 pinned with source URLs and SHA-256 checksums in `guest/android/images.json`.
 They retain their original file notices and Android NOTICE files. Android and

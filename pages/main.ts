@@ -5,6 +5,8 @@ import { nativeAndroidCursor } from './cursor.ts';
 import type { KernelHandle } from '../js/web.ts';
 import { parseBootAssets, verifySeed } from './boot-assets.ts';
 import { clearAndroidCheckpoint, loadAndroidCheckpoint, saveAndroidCheckpoint } from '../guest/android/checkpoint.ts';
+import { DEFAULT_RELAYS, parseNetworkSettings, readNetworkSettings, networkSearch } from './network.ts';
+import type { NetworkSettings } from './network.ts';
 
 function element<T extends HTMLElement>(id: string, ctor: { new(...args: never[]): T }): T {
 	const value = document.getElementById(id);
@@ -18,11 +20,79 @@ const error = element('error', HTMLParagraphElement);
 const light = element('light', HTMLSpanElement);
 const screen = element('display', HTMLDivElement);
 const placeholder = element('placeholder', HTMLParagraphElement);
+const idlePlaceholder = placeholder.innerHTML;
 const progress = element('progress', HTMLSpanElement);
 const progressBar = element('boot-progress', HTMLProgressElement);
 const phases = element('boot-phases', HTMLOListElement);
 const downloadDetail = element('download-detail', HTMLSpanElement);
 const reportButton = element('report', HTMLButtonElement);
+const networkForm = element('network-form', HTMLFormElement);
+const networkMode = element('network-mode', HTMLSelectElement);
+const relays = element('relays', HTMLTextAreaElement);
+const relayFields = element('relay-fields', HTMLDivElement);
+const networkMessage = element('network-message', HTMLParagraphElement);
+const networkBadge = element('network-badge', HTMLSpanElement);
+const share = element('share', HTMLButtonElement);
+const secure = location.protocol === 'https:';
+const storageKey = 'unkernel-android-network-v1';
+let networkSettings: NetworkSettings = { mode: 'wisp', servers: [...DEFAULT_RELAYS] };
+try {
+	let saved: string | null = null;
+	try { saved = localStorage.getItem(storageKey); } catch { /* Session settings still work without storage. */ }
+	networkSettings = readNetworkSettings(location.search, saved, secure);
+} catch (cause) {
+	networkMessage.textContent = cause instanceof Error ? cause.message : String(cause);
+	networkMessage.classList.add('invalid');
+}
+networkMode.value = networkSettings.mode;
+relays.value = (networkSettings.mode === 'wisp' ? networkSettings.servers : DEFAULT_RELAYS).join('\n');
+function showNetworkSettings(): void {
+	relayFields.hidden = networkMode.value === 'offline';
+	networkBadge.textContent = networkMode.value === 'offline' ? 'Offline' : 'WISP';
+}
+showNetworkSettings();
+networkMode.addEventListener('change', showNetworkSettings);
+function saveNetworkSettings(): URL {
+	networkSettings = parseNetworkSettings(networkMode.value, relays.value, secure);
+	const search = networkSearch(networkSettings);
+	let stored = true;
+	try { localStorage.setItem(storageKey, search.toString()); } catch { stored = false; }
+	const url = new URL(location.href);
+	url.searchParams.delete('wisp'); url.searchParams.delete('net');
+	for (const [name, value] of search) url.searchParams.append(name, value);
+	history.replaceState(null, '', url);
+	networkMessage.classList.remove('invalid');
+	networkMessage.textContent = networkSettings.mode === 'offline' ? 'Offline. Android has no network device.' : 'WISP configured. Use “Check internet” inside Android to test connectivity.';
+	if (!stored) networkMessage.textContent += ' Browser storage is unavailable; use the session link to keep these settings.';
+	return url;
+}
+function networkError(cause: unknown): void {
+	networkMessage.classList.add('invalid');
+	networkMessage.textContent = cause instanceof Error ? cause.message : String(cause);
+}
+networkForm.addEventListener('submit', event => {
+	event.preventDefault();
+	try { saveNetworkSettings(); } catch (cause) { networkError(cause); }
+});
+share.addEventListener('click', () => {
+	void (async () => {
+		try {
+			const url = saveNetworkSettings();
+			if (!navigator.clipboard) throw new Error('Copy the session link from your browser address bar. Automatic copying is unavailable.');
+			await navigator.clipboard.writeText(url.href);
+			networkMessage.textContent = 'Session link copied. It shares the image and network settings, not your running session.';
+		} catch (cause) { networkError(cause); }
+	})();
+});
+const stage = element('stage', HTMLDivElement);
+const fullscreen = element('fullscreen', HTMLButtonElement);
+fullscreen.disabled = !document.fullscreenEnabled;
+fullscreen.addEventListener('click', () => { void stage.requestFullscreen().catch(report); });
+function fitFullscreen(): void {
+	if (document.fullscreenElement === stage) stage.style.setProperty('--fullscreen-scale', String(Math.min(stage.clientWidth / 360, stage.clientHeight / 640)));
+}
+document.addEventListener('fullscreenchange', fitFullscreen);
+window.addEventListener('resize', fitFullscreen);
 let startupLog = '';
 let startedAt = 0;
 let lastStats: ReturnType<KernelHandle['stats']> | undefined;
@@ -60,6 +130,9 @@ function report(cause: unknown): void {
 function controls(): void {
 	start.disabled = busy || !!vm;
 	stop.disabled = !controller;
+	for (const input of networkForm.querySelectorAll('input, select, textarea, button')) {
+		if (input instanceof HTMLInputElement || input instanceof HTMLSelectElement || input instanceof HTMLTextAreaElement || input instanceof HTMLButtonElement) input.disabled = busy || !!vm;
+	}
 }
 async function shutdown(): Promise<void> {
 	screen.inert = true;
@@ -72,7 +145,7 @@ async function shutdown(): Promise<void> {
 	await old?.stop();
 	light.classList.remove('running');
 	placeholder.hidden = false;
-	placeholder.textContent = 'Your Android display will appear here.';
+	placeholder.innerHTML = idlePlaceholder;
 	progressBar.hidden = true;
 	controls();
 }
@@ -82,6 +155,8 @@ async function checkedFetch(path: string, signal: AbortSignal): Promise<Response
 	return response;
 }
 async function boot(): Promise<void> {
+	try { saveNetworkSettings(); } catch (cause) { networkError(cause); return; }
+	const network = networkSettings;
 	busy = true;
 	screen.inert = true;
 	error.hidden = true;
@@ -130,14 +205,15 @@ async function boot(): Promise<void> {
 		if (!support.ok) throw new Error(`${support.problems.join('. ')}. Use a current Chrome or Chromium browser with JSPI support.`);
 		if (!crossOriginIsolated) throw new Error('Browser isolation is not active. Reload once after the service worker installs, and allow service workers for this site.');
 		setPhase(1, 'Loading Android startup files…');
-		const [runtime, initScript, relay, assets] = await Promise.all([
+		const [runtime, initScript, relay, home, assets] = await Promise.all([
 			checkedFetch('./android/runtime.sh', signal).then(response => response.text()),
 			checkedFetch('./android/start-init.sh', signal).then(response => response.text()),
 			checkedFetch('./android/wlandr', signal).then(response => response.arrayBuffer()),
+			checkedFetch('./android/home.apk', signal).then(response => response.arrayBuffer()),
 			checkedFetch('./android/boot.json', signal).then(response => response.json()).then(parseBootAssets),
 		]);
 		const cpus = Math.min(assets.maxCpus, Math.max(1, navigator.hardwareConcurrency || 1));
-		const checkpointIdentity = `${assets.identity}:2048:${cpus}:android-checkpoint-v2`;
+		const checkpointIdentity = `${assets.identity}:2048:${cpus}:${networkSearch(network)}:android-checkpoint-v3`;
 		const forgetCheckpoint = async () => {
 			try { await clearAndroidCheckpoint(checkpointIdentity); }
 			catch (cause) { appendLog(`Could not clear local checkpoint: ${String(cause)}\n`); }
@@ -162,6 +238,7 @@ async function boot(): Promise<void> {
 					memoryMiB: 2048, memoryFallbackMiB: [], cpus, worker: true, signal: attemptSignal, restore,
 					cmdline: 'console=hvc0 rdinit=/init loglevel=3 androidboot.hardware=waydroid androidboot.selinux=permissive androidboot.serialno=unkernel',
 					gpu: true, display: { width: 360, height: 640 },
+					net: network.mode === 'wisp' ? { kind: 'net', backend: { kind: 'wisp', servers: network.servers } } : undefined,
 					disks: ['system', 'vendor'].map(name => ({ kind: 'http', url: new URL(`./android/${name}.erofs`, document.baseURI).href, readOnly: true })),
 					onProgress: event => {
 						if (signal.aborted) return;
@@ -200,6 +277,7 @@ async function boot(): Promise<void> {
 				setPhase(2, 'Preparing Android hardware and display…');
 				if (!restoring) {
 					await exec(runtime);
+					await exec('cat > /android/system/app/BrowserHome/BrowserHome.apk; chmod 644 /android/system/app/BrowserHome/BrowserHome.apk', new Uint8Array(home));
 					if (assets.seed) {
 						setPhase(2, 'Loading prepared Android data…');
 						const response = await checkedFetch('./android/data.tar.gz', signal);
@@ -254,7 +332,7 @@ async function boot(): Promise<void> {
 	for i in $(seq 300); do
 		children=$(cat /proc/${initPid}/task/${initPid}/children 2>/dev/null || true)
 		for child in $children; do
-			if [ -S "/proc/$child/root/dev/socket/logdr" ]; then
+			if [ -S "/proc/$child/root/dev/socket/logdr" ] && [ "$(nsenter -t "$child" -m -p /system/bin/getprop logd.ready 2>/dev/null)" = true ]; then
 				exec nsenter -t "$child" -m -p /system/bin/logcat -v brief
 			fi
 		done
@@ -271,10 +349,11 @@ async function boot(): Promise<void> {
 					for setting in window_animation_scale transition_animation_scale animator_duration_scale; do
 						nsenter -t "$child" -m -p /system/bin/cmd settings put global "$setting" 0
 					done
+					nsenter -t "$child" -m -p /system/bin/cmd package set-home-activity --user 0 dev.unkernel.home/.HomeActivity
 					nsenter -t "$child" -m -p /system/bin/am start -a android.intent.action.MAIN -c android.intent.category.HOME
 				fi
 				for attempt in $(seq 120); do
-					if nsenter -t "$child" -m -p /system/bin/dumpsys activity activities | grep -q 'topResumedActivity.*com.android.launcher3/'; then
+					if nsenter -t "$child" -m -p /system/bin/dumpsys activity activities | grep -q 'topResumedActivity.*dev.unkernel.home/'; then
 						exit 0
 					fi
 					sleep 2
@@ -297,8 +376,8 @@ async function boot(): Promise<void> {
 				setPhase(4, 'Android launcher drawn. Waiting for it to accept input…');
 				await exec(`for i in $(seq 120); do
 	for child in $(cat /proc/${initPid}/task/${initPid}/children); do
-		if nsenter -t "$child" -m -p /system/bin/dumpsys input | sed -n '/^  FocusedWindows:/,/^  FocusRequests:/p' | grep -q 'com.android.launcher3/' &&
-		   nsenter -t "$child" -m -p /system/bin/dumpsys -t 5 activity com.android.launcher3/.uioverrides.QuickstepLauncher | grep -q 'View Hierarchy:'; then
+		if nsenter -t "$child" -m -p /system/bin/dumpsys input | sed -n '/^  FocusedWindows:/,/^  FocusRequests:/p' | grep -q 'dev.unkernel.home/' &&
+		   nsenter -t "$child" -m -p /system/bin/dumpsys -t 5 activity dev.unkernel.home/.HomeActivity | grep -q 'View Hierarchy:'; then
 			exit 0
 		fi
 		break

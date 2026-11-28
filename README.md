@@ -5,8 +5,11 @@ The target is a full Android system with its graphical interface running on the
 WebAssembly Linux kernel, initially through Node for bring-up and then in a browser.
 
 Android 13 / LineageOS 20 now completes boot on the Android kernel build and
-renders the Trebuchet launcher and Settings through Wayland. The full-system
-harness checks `sys.boot_completed=1`, real app activities and rendered pixels.
+has rendered Android activities through Wayland. The current browser profile
+replaces Trebuchet with Browser Home, a small launcher with hardware acceleration
+disabled. The packaged-image Node harness has verified launcher readiness,
+Settings rendering, pointer navigation and Android HTTPS through WISP. Browser
+performance remains experimental. The full-system harness checks `sys.boot_completed=1`, real app activities and rendered pixels.
 The small Bionic fixture remains a separate kernel compatibility test.
 
 This is an independent clone on `feat/android`. Side by Side is unchanged.
@@ -91,7 +94,11 @@ RAM. A cold boot takes several minutes, depending on the host CPU and disk
 fetches. The emulator runs in a worker so startup does not block the page.
 Android apps still use software graphics on the emulated CPU and can respond
 slowly. The display uses the browser cursor to avoid distorted Wayland cursor
-buffers. Stop discards guest changes. The first browser version runs offline.
+buffers. Stop discards guest changes. Network settings support configurable WISP
+relays or offline operation. WISP is enabled by default, using the same public
+relays as Side by Side; configure a trusted relay for private testing. The Android
+launcher has a “Check internet” action that requests HTTPS from inside Android.
+A saved relay setting alone does not establish that Android networking works.
 See [Android graphics](guest/android/graphics.md) for the GPU driver requirements.
 
 The image workflow converts pinned Waydroid ARM64 system/vendor images to EROFS,
@@ -100,6 +107,8 @@ these disks with HTTP Range requests. The Pages build requires these artifacts
 and the Android kernel with Binder and BPF support:
 
 ```sh
+# Requires JDK 17 and ANDROID_HOME with platform 33 and build-tools 35.0.0.
+bash guest/android/launcher/build.sh
 bun run check:pages
 ANDROID_KERNEL=/path/to/android/unkernel.wasm \
 UNKERNEL_BUNDLE=/path/to/android/unkernel.wasm bun run build:pages
@@ -109,6 +118,18 @@ bun run test:pages
 Place the compressed images and `images.json` in `vendor/android/web/` first.
 `test:pages` boots the exact packaged kernel and compressed disks, checks the
 launcher and Settings, and opens Network & internet through the Wayland pointer path.
+Set `ANDROID_WISP=wss://your-relay/` to also require a successful HTTPS request
+from Browser Home. The browser settings accept repeated `wisp` URL parameters
+and `net=off` for offline links. They are also saved in local browser storage.
+
+The minimal profile hides the camera, gallery, recorder, calendar, wallpapers,
+Trebuchet, updater and other optional apps in a disposable overlay. This reduces
+package scanning and background work, but does not shrink the downloaded disk.
+The profile also removes init service definitions for unsupported 32-bit system
+and vendor binaries, which otherwise repeatedly fail and restart in the ARM64 guest.
+Browser Home offers Settings, installed apps, a tap counter and an Internet check.
+The system compositor still uses software Vulkan; launcher changes alone do not
+establish a system-wide performance improvement.
 
 `dist-pages/` is the complete static site, with relative asset URLs for project
 paths. A COI service worker provides browser isolation on Pages. Use a current
@@ -117,7 +138,9 @@ Chromium browser with WebAssembly JSPI; the first visit may reload once.
 The Pages workflow downloads the pinned kernel and compressed image artifacts,
 builds a cold-boot site, exports prepared data only after the launcher draws,
 then rebuilds and checks prepared boot and pointer input before upload. Prepared
-data is bound to the kernel, image manifest and startup scripts by a checksum.
+data is bound to the kernel, image manifest, startup scripts and launcher APK
+by a checksum. Rebuild the launcher before packaging the site. A changed launcher
+or profile invalidates old prepared data and falls back to a cold boot.
 The page selects up to four CPUs only when the kernel bundle contains its SMP
 variant. Experimental local checkpoints can restore the drawn launcher, but
 they remain disabled while Android interaction and display stability are being

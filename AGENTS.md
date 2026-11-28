@@ -5,6 +5,27 @@
 This checkout targets a full Android graphical system on unkernel. It is separate
 from Side by Side and the package-demo design. Work is on `feat/android`.
 
+### Product direction
+
+Build a compelling demonstration of a real Android system running locally in a
+browser, then make it useful for trying and testing Android apps. Put the live
+Android display and session controls first. Preserve startup progress, clear
+failure states and downloadable diagnostics. Never present a drawn but frozen
+launcher as a usable session.
+
+The first target is minimal ARM64 Android based on the pinned Waydroid VANILLA
+image, with a small software-rendered launcher, Settings and a touch demo. Keep
+Android's framework, permissions, package installer and networking services for
+future APK testing. Avoid Google services, widgets and unnecessary bundled apps.
+Do not add distribution choices until each choice passes a real interaction
+check. Reducing background work does not establish a graphics speedup.
+
+Internet access should use configurable WISP relays, following Side by Side's
+settings model. Include an offline mode, validate relay URLs and distinguish
+relay configuration from verified Android connectivity. App testing and APK
+upload are product goals; advertise them as available only after verification.
+Keep the site statically deployable on GitHub Pages.
+
 - Keep the kernel, CPU emulator, SDK, graphics bridges, guest tools and licenses.
   The upstream desktop/demo website and upstream release workflow were removed.
   `pages/` is the focused full Android graphical demo, deployed by the Pages workflow.
@@ -17,6 +38,10 @@ from Side by Side and the package-demo design. Work is on `feat/android`.
 - Use Bun. Do not restore the removed pnpm workspace or lockfile.
 - Use a feature branch and the managed signed GitHub API publication flow when
   asked to publish. Do not publish to main. Preserve upstream attribution.
+- Keep unsupported 32-bit system and vendor executables out of Android init's service
+  list. Otherwise init continuously respawns programs this ARM64 guest cannot run.
+- Diagnose live JSPI guests using bounded logs and screenshots. Attaching the
+  Node inspector has crashed this Node/V8 build while a JSPI guest was active.
 
 The following upstream notes describe the retained engine and build system.
 

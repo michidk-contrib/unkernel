@@ -8,6 +8,7 @@ import { encodePNG } from 'wland/headless';
 import { seedIdentity, readSeed, restoreSeed, saveSeed } from './seed.ts';
 
 const root = resolve(import.meta.dirname, '../..');
+const launcherPath = process.env.ANDROID_RUNTIME_DIR ? resolve(process.env.ANDROID_RUNTIME_DIR, 'home.apk') : resolve(root, 'vendor/android/launcher/home.apk');
 const reports = resolve(process.env.ANDROID_REPORTS ?? `${root}/vendor/android/framework-reports`);
 const startedAt = performance.now();
 await mkdir(reports, { recursive: true });
@@ -16,6 +17,7 @@ const cmdline = 'console=hvc0 rdinit=/init loglevel=7 printk.devkmsg=on androidb
 const vm = await createKernel({
 	kernel, cmdline, memoryMiB: 2048, cpus: Number(process.env.ANDROID_CPUS ?? 1),
 	gpu: true, display: { width: 360, height: 640 },
+	net: process.env.ANDROID_WISP ? { kind: 'net', backend: { kind: 'wisp', servers: process.env.ANDROID_WISP } } : undefined,
 	disks: [
 		{ kind: 'file', path: process.env.ANDROID_SYSTEM_IMAGE ?? resolve(root, 'vendor/android/system/system.img'), readOnly: true },
 		{ kind: 'file', path: process.env.ANDROID_VENDOR_IMAGE ?? resolve(root, 'vendor/android/system/vendor.img'), readOnly: true },
@@ -28,14 +30,21 @@ const watchdog = setTimeout(() => void vm.stop(), 1080000);
 let stage = 'mount';
 let display: Awaited<ReturnType<typeof startAndroidDisplay>> | undefined;
 let androidNamespace: string[] | undefined;
+let diagnosticTicker: ReturnType<typeof setInterval> | undefined;
+let writingDiagnostics = false;
+let androidLog = '';
 try {
 	const setupScript = await readFile(resolve(process.env.ANDROID_RUNTIME_DIR ?? import.meta.dirname, 'runtime.sh'), 'utf8');
 	const setup = await vm.exec('/bin/sh', ['-ec', setupScript], { env: { ANDROID_DISK_FORMAT: process.env.ANDROID_DISK_FORMAT ?? 'ext4' }, signal: AbortSignal.timeout(60000) });
 	await writeFile(`${reports}/mount.txt`, JSON.stringify(setup, null, 2));
 	if (setup.exitCode !== 0) throw new Error(`System image mount failed: ${setup.stderr}`);
+	const launcher = await vm.exec('/bin/sh', ['-ec', 'cat > /android/system/app/BrowserHome/BrowserHome.apk; chmod 644 /android/system/app/BrowserHome/BrowserHome.apk'], {
+		input: await readFile(launcherPath), signal: AbortSignal.timeout(30000),
+	});
+	if (launcher.exitCode !== 0) throw new Error('Cannot install Browser Home in the Android system overlay');
 	if (process.env.ANDROID_CPUS && vm.stats().cpus !== Number(process.env.ANDROID_CPUS)) throw new Error('Android did not start the requested number of CPUs');
 	if (process.env.ANDROID_DATA_SEED) {
-		const identity = await seedIdentity(process.env.ANDROID_RUNTIME_DIR ?? import.meta.dirname, kernel, resolve(root, 'vendor/android/web/images.json'));
+		const identity = await seedIdentity(process.env.ANDROID_RUNTIME_DIR ?? import.meta.dirname, kernel, resolve(root, 'vendor/android/web/images.json'), launcherPath);
 		const seed = await readSeed(process.env.ANDROID_DATA_SEED, identity);
 		await restoreSeed(vm, seed.data);
 	}
@@ -48,6 +57,29 @@ try {
 		for await (const bytes of stream) initOutput = (initOutput + new TextDecoder().decode(bytes)).slice(-4_000_000);
 	};
 	const drain = Promise.all([read(init.stdout), read(init.stderr)]);
+	const logs = await vm.spawn('/bin/sh', ['-c', `
+for i in $(seq 300); do
+    for child in $(cat /proc/${init.pid}/task/${init.pid}/children 2>/dev/null); do
+        if [ -S "/proc/$child/root/dev/socket/logdr" ] && [ "$(nsenter -t "$child" -m -p /system/bin/getprop logd.ready 2>/dev/null)" = true ]; then
+            exec nsenter -t "$child" -m -p /system/bin/logcat -v brief
+        fi
+    done
+    sleep 1
+done`], { pty: false });
+	const collect = async (stream: ReadableStream<Uint8Array>) => {
+		for await (const bytes of stream) androidLog = (androidLog + new TextDecoder().decode(bytes)).slice(-500_000);
+	};
+	void Promise.all([collect(logs.stdout), collect(logs.stderr)]).catch(() => {});
+	diagnosticTicker = setInterval(() => {
+		if (writingDiagnostics) return;
+		writingDiagnostics = true;
+		void (async () => {
+			await writeFile(`${reports}/live-logcat.txt`, androidLog);
+			await writeFile(`${reports}/live-init.txt`, initOutput);
+			await writeFile(`${reports}/live-console.txt`, consoleOutput.slice(-96000));
+			if (display?.desktop.windows().length) await writeFile(`${reports}/live.png`, await encodePNG(display.desktop.screenshot()));
+		})().catch(() => {}).finally(() => { writingDiagnostics = false; });
+	}, 30000);
 	const result = await Promise.race([
 		drain.then(async () => ({ ended: await init.ended })),
 		vm.exec('/bin/sh', ['-ec', `
@@ -102,8 +134,9 @@ exit 1
 	await writeFile(`${reports}/home-activity.txt`, JSON.stringify(home, null, 2));
 	const homeComponent = home.stdout.trim().split('\n').at(-1) ?? '';
 	if (home.exitCode !== 0 || !/^[\w.]+\/[\w.$]+$/.test(homeComponent)) throw new Error('Android has no resolvable Home activity');
-	// Provision's temporary HOME activity redirects to the pinned Trebuchet launcher.
-	const homePackage = 'com.android.launcher3';
+	const selectHome = await vm.exec('/bin/nsenter', [...enter, '/system/bin/cmd', 'package', 'set-home-activity', '--user', '0', 'dev.unkernel.home/.HomeActivity'], { signal: AbortSignal.timeout(30000) });
+	if (selectHome.exitCode !== 0) throw new Error(`Cannot select Browser Home: ${selectHome.stderr}`);
+	const homePackage = 'dev.unkernel.home';
 	const waitForActivity = async (packageName: string, name: string) => {
 		for (let i = 0; i < 30; i++) {
 			const current = await vm.exec('/bin/nsenter', [...enter, '/system/bin/dumpsys', 'activity', 'activities'], { signal: AbortSignal.timeout(15000) });
@@ -133,8 +166,8 @@ exit 1
 	stage = 'launcher-input';
 	const inputReady = await vm.exec('/bin/nsenter', [...enter, '/system/bin/sh', '-ec', `
 for i in $(seq 60); do
-	if dumpsys input | sed -n '/^  FocusedWindows:/,/^  FocusRequests:/p' | grep -q 'com.android.launcher3/' &&
-	   dumpsys -t 5 activity com.android.launcher3/.uioverrides.QuickstepLauncher | grep -q 'View Hierarchy:'; then
+	if dumpsys input | sed -n '/^  FocusedWindows:/,/^  FocusRequests:/p' | grep -q 'dev.unkernel.home/' &&
+	   dumpsys -t 5 activity dev.unkernel.home/.HomeActivity | grep -q 'View Hierarchy:'; then
 		exit 0
 	fi
 	sleep 2
@@ -146,8 +179,22 @@ exit 1`], { signal: AbortSignal.timeout(450000) });
 	const launcherFrame = display.desktop.screenshot();
 	await writeFile(`${reports}/launcher.png`, await encodePNG(launcherFrame));
 	await writeFile(`${reports}/timing.json`, JSON.stringify({ launcherMs: Math.round(performance.now() - startedAt), cpus: vm.stats().cpus, preparedData: !!process.env.ANDROID_DATA_SEED }));
+	if (process.env.ANDROID_WISP) {
+		stage = 'network';
+		await vm.exec('/bin/nsenter', [...enter, '/system/bin/am', 'start', '-n', 'dev.unkernel.home/.HomeActivity', '-a', 'dev.unkernel.home.CHECK_NETWORK'], { signal: AbortSignal.timeout(30000) });
+		let connected = false;
+		for (let i = 0; i < 60; i++) {
+			const network = await vm.exec('/bin/nsenter', [...enter, '/system/bin/logcat', '-d', '-s', 'BrowserHome:I', '*:S'], { signal: AbortSignal.timeout(15000) });
+			await writeFile(`${reports}/network-check.txt`, network.stdout);
+			if (/Network HTTP 200/.test(network.stdout)) { connected = true; break; }
+			if (network.stdout.includes('Network failed:')) break;
+			await new Promise(resolve => setTimeout(resolve, 1000));
+		}
+		if (!connected) throw new Error('Android app HTTPS check through WISP failed');
+		await vm.exec('/bin/nsenter', [...enter, '/system/bin/am', 'start', '-n', 'dev.unkernel.home/.HomeActivity', '-a', 'android.intent.action.MAIN'], { signal: AbortSignal.timeout(30000) });
+	}
 	if (process.env.ANDROID_EXPORT_SEED) {
-		const identity = await seedIdentity(process.env.ANDROID_RUNTIME_DIR ?? import.meta.dirname, kernel, resolve(root, 'vendor/android/web/images.json'));
+		const identity = await seedIdentity(process.env.ANDROID_RUNTIME_DIR ?? import.meta.dirname, kernel, resolve(root, 'vendor/android/web/images.json'), launcherPath);
 		const seed = await saveSeed(vm, enter, process.env.ANDROID_EXPORT_SEED, identity);
 		await writeFile(`${reports}/seed-export.json`, JSON.stringify(seed, null, 2));
 	} else {
@@ -192,7 +239,7 @@ exit 1`], { signal: AbortSignal.timeout(450000) });
 	process.exitCode = 1;
 	if (androidNamespace) {
 		for (const [name, command] of [
-			['launcher-stack', ['sh', '-c', 'pid=$(pidof com.android.launcher3); [ -n "$pid" ] && debuggerd -j "$pid"']],
+			['launcher-stack', ['sh', '-c', 'pid=$(pidof dev.unkernel.home); [ -n "$pid" ] && debuggerd -j "$pid"']],
 			['surfaceflinger', ['dumpsys', 'SurfaceFlinger']],
 			['window', ['dumpsys', 'window', 'windows']],
 			['latest-logcat', ['logcat', '-b', 'main', '-b', 'system', '-b', 'crash', '-d', '-t', '3000']],
@@ -206,6 +253,7 @@ exit 1`], { signal: AbortSignal.timeout(450000) });
 		}
 	}
 } finally {
+	clearInterval(diagnosticTicker);
 	clearTimeout(watchdog);
 	await display?.capture().catch(error => writeFile(`${reports}/display-error.txt`, String(error)));
 	await display?.close().catch(() => {});

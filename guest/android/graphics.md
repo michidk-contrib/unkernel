@@ -98,7 +98,7 @@ exposed by the compositor and used by its browser presenter.
 ## Software rendering stalls
 
 A rendered launcher is not sufficient evidence that Android accepts input. In
-the browser check, Android received mouse events at the expected coordinates,
+the earlier Trebuchet browser check, Android received mouse events at the expected coordinates,
 but its launcher failed to acknowledge them within its 50-second timeout.
 Earlier launcher thread dumps show the UI thread waiting for HWUI's RenderThread,
 which waits for pastel Vulkan presentation. Its queue worker was compiling
@@ -110,3 +110,11 @@ SwiftShader's LLVM optimization level is a build-time setting,
 HWUI also supports `debug.hwui.renderer=skiavk`, which bypasses ANGLE for new app
 processes while retaining the software Vulkan driver. That alternative has not
 passed an Android interaction check and is not selected by the demo.
+
+The minimal profile uses Browser Home with hardware acceleration disabled for
+its own views. On 2026-11-28, the packaged-image Node harness passed Home
+readiness, Settings rendering and a Wayland pointer click opening Network &
+internet. An Android app also fetched HTTPS through WISP. Home readiness took
+371,777 ms with cold data and one emulated CPU. This single native run does
+not establish browser performance or eliminate stalls in SurfaceFlinger and
+other apps that still use software Vulkan.

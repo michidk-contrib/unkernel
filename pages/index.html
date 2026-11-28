@@ -4,22 +4,42 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Run an experimental Android 13 interface in your browser with unkernel.">
-<title>Android on unkernel</title>
+<meta name="description" content="A real Android system running locally in your browser. An experiment built with unkernel and Waydroid.">
+<title>Android in your browser · unkernel</title>
 <link rel="stylesheet" href="./style.css">
 <script src="./coi-serviceworker.js"></script>
 <script type="module" src="./main.js"></script>
 </head>
 <body>
-<header><a class="brand" href="./">unkernel <span>/ Android</span></a><a href="https://github.com/michidk-contrib/unkernel/tree/feat/android">Source on GitHub ↗</a></header>
-<main>
-<section class="intro"><h1>Android starts here.</h1><p>Android 13, running locally in your browser.<br>Boot the launcher and explore Android apps.</p></section>
-<section class="workspace" aria-label="Android virtual machine">
-<div class="toolbar"><div><span id="light" class="light"></span><span id="status" role="status" aria-live="polite">Ready to start</span></div><div class="actions"><span class="memory-info">2 GiB RAM</span><button id="start">Start Android</button><button id="stop" disabled>Stop</button></div></div>
-<div class="boot-progress"><ol id="boot-phases" class="boot-phases" aria-label="Startup stages" hidden><li>Browser</li><li>Linux</li><li>Display</li><li>Android</li><li>Launcher visible</li></ol><progress id="boot-progress" aria-labelledby="status" hidden></progress><span id="download-detail"></span><p><span id="progress" role="status" aria-live="polite"></span> <button id="report" hidden>Download startup report</button></p></div>
-<div class="stage"><p id="placeholder">Your Android display will appear here.</p><div id="display" aria-label="Interactive Android display"></div></div>
+<header class="site-header">
+<a class="brand" href="./" aria-label="unkernel Android home"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 5v9a7 7 0 0 0 14 0V5M10 5v9a1 1 0 0 0 2 0V5" stroke="currentColor" stroke-width="2.5"/></svg>unkernel <span>/ Android</span></a>
+<nav aria-label="Project"><span class="experimental">Experimental</span><a href="https://github.com/michidk-contrib/unkernel/tree/feat/android">View source <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 12 12 4M4 4h8v8" stroke="currentColor" stroke-width="1.5"/></svg></a></nav>
+</header>
+<main class="workspace" aria-label="Android workspace">
+<aside class="panel">
+<div class="intro"><h1>Android. <br>In your browser.</h1><p>A real Android system, running on your device. Start a session and see what a browser can do.</p></div>
+<section class="session" aria-labelledby="session-title">
+<h2 id="session-title">Your session</h2>
+<dl class="specs"><div><dt>Image</dt><dd>Minimal Waydroid <span>Android 13 · ARM64</span></dd></div><div><dt>Memory</dt><dd>2 GiB <span>Reserved while running</span></dd></div><div><dt>Display</dt><dd>360 × 640 <span>Software graphics</span></dd></div></dl>
+<div class="actions"><button id="start" class="primary">Start Android<svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7 4 9 6-9 6Z" fill="currentColor"/></svg></button><button id="stop" disabled>Stop</button></div>
+<p class="session-note">Stopping discards this session.</p>
 </section>
+<details class="network-settings"><summary>Internet connection <span id="network-badge">WISP</span></summary>
+<form id="network-form">
+<label for="network-mode">Connection</label><select id="network-mode"><option value="wisp">Internet through WISP</option><option value="offline">Offline</option></select>
+<div id="relay-fields"><label for="relays">WISP relays <span>One URL per line</span></label><textarea id="relays" rows="3" spellcheck="false" autocomplete="off" autocapitalize="none" aria-describedby="relay-note"></textarea><p id="relay-note" class="hint">Relays carry your Android network traffic. Use a relay you trust or host your own.</p></div>
+<div class="settings-actions"><button type="submit">Save settings</button><button id="share" type="button">Copy session link</button></div>
+<p id="network-message" class="hint" role="status" aria-live="polite"></p>
+</form></details>
+<details class="about"><summary>Before you start</summary><p>Use a current Chrome or Chromium browser with WebAssembly JSPI. The first visit may reload once to enable browser isolation.</p><p>Android startup can take several minutes. Keep this tab visible. Software graphics can still freeze or respond slowly; this is an experiment.</p><p>The goal is to make trying Android apps as easy as opening a link. APK upload is not available yet.</p></details>
+</aside>
+<section class="device-area" aria-label="Android virtual machine">
+<div class="device-toolbar"><div class="device-status"><span id="light" class="light"></span><span id="status" role="status" aria-live="polite">Ready to start</span></div><button id="fullscreen" class="icon-button" aria-label="Open Android display fullscreen" title="Fullscreen"><svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M3 8V3h5m4 0h5v5m0 4v5h-5m-4 0H3v-5" stroke="currentColor" stroke-width="1.5"/></svg></button></div>
+<div class="stage" id="stage"><div class="device-frame"><div id="display" aria-label="Interactive Android display"></div><p id="placeholder"><svg viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M14 17 9 9m25 8 5-8M9 29a15 15 0 0 1 30 0v8H9v-8Z" stroke="currentColor" stroke-width="2.5"/><circle cx="17" cy="27" r="2" fill="currentColor"/><circle cx="31" cy="27" r="2" fill="currentColor"/></svg><strong>Your browser is the device.</strong><span>Start Android to launch a real, local session.</span></p></div></div>
+<div class="boot-progress"><ol id="boot-phases" class="boot-phases" aria-label="Startup stages" hidden><li>Browser</li><li>Linux</li><li>Display</li><li>Android</li><li>Launcher</li></ol><progress id="boot-progress" aria-labelledby="status" hidden></progress><span id="download-detail"></span><p><span id="progress" role="status" aria-live="polite"></span></p><button id="report" hidden>Download startup report</button></div>
 <p id="error" role="alert" hidden></p>
-<section class="details"><div><h2>A full Android system</h2><p>LineageOS 20 / Android 13 on an emulated ARM64 CPU, with the Trebuchet launcher, Settings and software graphics. Click the display to interact. Apps use software graphics and may respond slowly. Stopping discards your session.</p></div><div><h2>Startup takes time</h2><p>Android initializes its system services and apps before showing the launcher. Startup time depends on your device. A black Android display during startup is expected. Keep this tab visible. The VM reserves 2 GiB of RAM and uses your device's CPU.</p></div><div><h2>Browser requirements</h2><p>Use a current Chromium browser with WebAssembly JSPI. The first visit may reload once to enable browser isolation. This initial demo runs offline.</p></div></section>
-</main><footer><span>Built on <a href="https://github.com/pithings/unkernel">unkernel</a>. Android images from <a href="https://waydro.id/">Waydroid</a>.</span><a href="./THIRD-PARTY.md">Licenses and attribution</a></footer>
+<div class="device-caption"><span>Runs locally with WebAssembly</span><span>Minimal Android · No Google services</span></div>
+</section>
+</main>
+<footer><span>An experiment built on <a href="https://github.com/pithings/unkernel">unkernel</a> with <a href="https://waydro.id/">Waydroid</a>.</span><a href="./THIRD-PARTY.md">Licenses &amp; attribution</a></footer>
 </body></html>

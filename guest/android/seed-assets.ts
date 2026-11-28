@@ -11,9 +11,9 @@ export interface SeedManifest {
 	sha256: string;
 }
 
-export async function seedIdentity(runtime: string, kernel: string, images: string): Promise<string> {
+export async function seedIdentity(runtime: string, kernel: string, images: string, launcher = resolve(runtime, 'home.apk')): Promise<string> {
 	const hash = createHash('sha256');
-	for (const file of [kernel, resolve(runtime, 'runtime.sh'), resolve(runtime, 'start-init.sh'), images]) {
+	for (const file of [kernel, resolve(runtime, 'runtime.sh'), resolve(runtime, 'start-init.sh'), launcher, images]) {
 		const bytes = await readFile(file);
 		hash.update(String(bytes.length)).update(':').update(bytes);
 	}

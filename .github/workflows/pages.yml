@@ -34,6 +34,14 @@ jobs:
         with:
           node-version: 24
       - run: bun install --frozen-lockfile
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Build the minimal Android launcher
+        run: |
+          sdkmanager 'platforms;android-33' 'build-tools;35.0.0'
+          bash guest/android/launcher/build.sh
       - run: bun run android:prepare
       - uses: actions/download-artifact@v4
         with:
