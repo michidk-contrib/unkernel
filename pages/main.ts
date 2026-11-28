@@ -98,8 +98,9 @@ let startedAt = 0;
 let lastStats: ReturnType<KernelHandle['stats']> | undefined;
 function appendLog(text: string): void { startupLog = (startupLog + text).slice(-96000); }
 function visiblePixels(): number {
+	let maximum = 0;
 	for (const canvas of screen.querySelectorAll('canvas')) {
-		if (canvas.width < 100 || canvas.height < 100) continue;
+		if (canvas.width < 100 || canvas.height < 100 || getComputedStyle(canvas).display === 'none') continue;
 		const pixels = canvas.getContext('2d')?.getImageData(0, 0, canvas.width, canvas.height).data;
 		if (!pixels) continue;
 		let count = 0;
@@ -107,8 +108,9 @@ function visiblePixels(): number {
 			if (pixels[i]! > 16 || pixels[i + 1]! > 16 || pixels[i + 2]! > 16) count++;
 		}
 		if (count >= 5000) return count;
+		maximum = Math.max(maximum, count);
 	}
-	return 0;
+	return maximum;
 }
 reportButton.addEventListener('click', () => {
 	const url = URL.createObjectURL(new Blob([JSON.stringify({
@@ -183,13 +185,17 @@ async function boot(): Promise<void> {
 			else item.removeAttribute('aria-current');
 		}
 	};
+	let displayShown = false;
 	const updateProgress = () => {
 		lastStats = vm?.stats() ?? lastStats;
 		const seconds = Math.round((performance.now() - startedAt) / 1000);
 		progress.textContent = `${Math.floor(seconds / 60)}m ${seconds % 60}s elapsed${lastStats ? ` · ${(lastStats.block.bytesRead / 1048576).toFixed(0)} MiB read from Android disks` : ''}${document.hidden ? ' · Keep this tab visible to continue startup' : ''}`;
 		if (controller === session) {
 			placeholder.textContent = `${status.textContent} Keep this tab visible during startup.`;
-			placeholder.hidden = visiblePixels() >= 5000;
+			// A small boot message is enough to uncover Android. Keep it uncovered
+			// through black frames between activities; readiness is checked separately.
+			displayShown ||= visiblePixels() > 0;
+			placeholder.hidden = displayShown;
 		}
 	};
 	const ticker = setInterval(updateProgress, 1000);
