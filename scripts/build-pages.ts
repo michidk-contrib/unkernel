@@ -6,6 +6,7 @@ import { brotliDecompressSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
 import { seedIdentity, readSeed } from '../guest/android/seed-assets.ts';
+import { parseStartupArtifact } from '../guest/android/startup-assets.ts';
 import { smpKernelFromBundle } from '../js/core/kpatch.ts';
 
 const root = resolve(import.meta.dirname, '..');
@@ -15,6 +16,26 @@ const kernel = process.env.ANDROID_KERNEL;
 if (!kernel) throw new Error('Set ANDROID_KERNEL to the verified Binder/BPF Android kernel bundle');
 const launcher = `${root}/vendor/android/launcher/home.apk`;
 try { await stat(launcher); } catch { throw new Error('Build Browser Home first: bash guest/android/launcher/build.sh (requires JDK 17 and ANDROID_HOME)'); }
+const identity = await seedIdentity(`${root}/guest/android`, kernel, `${images}/images.json`, launcher);
+let prepared: Awaited<ReturnType<typeof readSeed>> | undefined;
+try {
+	prepared = await readSeed(images, identity);
+} catch (cause) {
+	if (process.env.ANDROID_ALLOW_COLD_BOOT !== '1' || process.env.ANDROID_REQUIRE_SEED === '1') {
+		throw new Error('Prepared Android startup data is missing or stale. Bootstrap with ANDROID_ALLOW_COLD_BOOT=1, run ANDROID_EXPORT_SEED=vendor/android/web bun run test:pages, then rebuild.', { cause });
+	}
+	console.log(`Explicit cold-boot bootstrap: ${String(cause)}`);
+}
+const startupDirectory = process.env.ANDROID_STARTUP ? resolve(process.env.ANDROID_STARTUP) : undefined;
+let startup;
+if (startupDirectory) {
+	startup = parseStartupArtifact(JSON.parse(await readFile(`${startupDirectory}/startup.json`, 'utf8')));
+	if (startup.identity !== identity) throw new Error('Prebooted Android belongs to a different kernel or image build');
+	const file = `${startupDirectory}/startup.${startup.codec === 'gzip' ? 'gz' : 'zst'}`;
+	const hash = createHash('sha256');
+	for await (const chunk of createReadStream(file)) hash.update(chunk);
+	if ((await stat(file)).size !== startup.bytes || hash.digest('hex') !== startup.sha256) throw new Error('Prebooted Android checksum mismatch');
+}
 await rm(out, { recursive: true, force: true });
 await mkdir(`${out}/runtime/_chunks`, { recursive: true });
 await mkdir(`${out}/android`, { recursive: true });
@@ -23,11 +44,11 @@ await cp(kernel, `${out}/runtime/unkernel.wasm`);
 for (const file of ['LICENSE', 'LICENSE-MIT', 'THIRD-PARTY.md']) await cp(`${root}/${file}`, `${out}/${file}`);
 const isolationWorker = await readFile(`${root}/node_modules/coi-serviceworker/coi-serviceworker.js`, 'utf8');
 if (!isolationWorker.includes('fetch(request)')) throw new Error('Review the COI worker cache integration after upgrading coi-serviceworker');
-await Bun.write(`${out}/coi-serviceworker.js`, `if (typeof window === 'undefined') importScripts('./asset-cache.js');\n${isolationWorker.replace('fetch(request)', 'self.androidAssetFetch(request)')}`);
+await Bun.write(`${out}/coi-serviceworker.js`, `if (typeof window === 'undefined') importScripts('./asset-cache.js');\n${isolationWorker.replace('fetch(request)', 'self.androidAssetFetch(request, { waitUntil: work => event.waitUntil(work) })')}`);
 const cacheBuild = await Bun.build({ entrypoints: [`${root}/pages/asset-cache.ts`], outdir: out, target: 'browser', format: 'iife', minify: true });
 if (!cacheBuild.success) throw new AggregateError(cacheBuild.logs, 'Android cache worker build failed');
 await mkdir(`${out}/licenses`, { recursive: true });
-for (const name of ['wland', 'coi-serviceworker']) await cp(`${root}/node_modules/${name}/LICENSE`, `${out}/licenses/${name}.txt`);
+for (const name of ['wland', 'coi-serviceworker', 'fzstd']) await cp(`${root}/node_modules/${name}/LICENSE`, `${out}/licenses/${name}.txt`);
 for (const file of ['runtime.sh', 'start-init.sh']) await cp(`${root}/guest/android/${file}`, `${out}/android/${file}`);
 await cp(launcher, `${out}/android/home.apk`);
 await cp(`${images}/images.json`, `${out}/android/images.json`);
@@ -55,18 +76,20 @@ for (const file of ['index.html', 'style.css']) await cp(`${root}/pages/${file}`
 await cp(`${root}/pages/fonts`, `${out}/fonts`, { recursive: true });
 await Bun.write(`${out}/.nojekyll`, '');
 await Bun.write(`${out}/android/kernel.sha256`, createHash('sha256').update(await readFile(kernel)).digest('hex'));
-const identity = await seedIdentity(`${out}/android`, kernel, `${images}/images.json`);
 let seed: { bytes: number; sha256: string } | undefined;
-try {
-	const prepared = await readSeed(images, identity);
+if (prepared) {
 	await cp(`${images}/data.tar.gz`, `${out}/android/data.tar.gz`);
 	seed = { bytes: prepared.manifest.bytes, sha256: prepared.manifest.sha256 };
-} catch (cause) {
-	if (process.env.ANDROID_REQUIRE_SEED === '1') throw cause;
-	console.log(`Building a cold-boot image: ${String(cause)}`);
+}
+if (startup && startupDirectory) {
+	const file = `startup.${startup.codec === 'gzip' ? 'gz' : 'zst'}`;
+	for (const [index, name] of ['system', 'vendor'].entries()) {
+		if ((await stat(`${images}/${name}.erofs`)).size !== startup.diskBytes[index]) throw new Error('Prebooted Android disk size mismatch');
+	}
+	await link(`${startupDirectory}/${file}`, `${out}/android/${file}`).catch(() => cp(`${startupDirectory}/${file}`, `${out}/android/${file}`));
 }
 const smp = !!await smpKernelFromBundle(new Uint8Array(await readFile(kernel)));
-await Bun.write(`${out}/android/boot.json`, JSON.stringify({ version: 1, identity, maxCpus: smp ? 4 : 1, checkpoint: process.env.ANDROID_CHECKPOINTS !== '0', seed }, null, 2));
+await Bun.write(`${out}/android/boot.json`, JSON.stringify({ version: 1, identity, maxCpus: smp ? 4 : 1, checkpoint: process.env.ANDROID_CHECKPOINTS !== '0', seed, startup }, null, 2));
 async function directoryBytes(path: string): Promise<number> {
 	let bytes = 0;
 	for (const entry of await readdir(path, { withFileTypes: true })) {

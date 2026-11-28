@@ -56,3 +56,20 @@ test('quota failures still return downloaded data', async () => {
 	const response = await androidAssetFetch(new Request(`https://demo.test/runtime/unkernel.wasm?v=${'c'.repeat(64)}`), { storage, fetcher });
 	assert.equal(await response.text(), 'kernel');
 });
+
+test('startup downloads stream while the service worker retains background cache writes', async () => {
+	let finish: (() => void) | undefined;
+	const stored = new Promise<void>(resolve => { finish = resolve; });
+	let background: Promise<void> | undefined;
+	const storage = { async open() { return {
+		async match() { return undefined; },
+		async put() { await stored; },
+	}; } };
+	const response = await androidAssetFetch(new Request(`https://demo.test/android/startup.zst?v=${'a'.repeat(64)}`), {
+		storage, fetcher: async () => new Response('startup'), waitUntil: work => { background = work; },
+	});
+	assert.equal(await response.text(), 'startup');
+	assert.ok(background, 'the service worker must retain the cache write');
+	finish?.();
+	await background;
+});

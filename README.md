@@ -162,8 +162,21 @@ and the Android kernel with Binder and BPF support:
 bash guest/android/launcher/build.sh
 bun run check:pages
 ANDROID_KERNEL=/path/to/android/unkernel.wasm \
+UNKERNEL_BUNDLE=/path/to/android/unkernel.wasm \
+ANDROID_ALLOW_COLD_BOOT=1 bun run build:pages
+ANDROID_EXPORT_SEED=vendor/android/web bun run test:pages
+ANDROID_KERNEL=/path/to/android/unkernel.wasm \
 UNKERNEL_BUNDLE=/path/to/android/unkernel.wasm bun run build:pages
-bun run test:pages
+ANDROID_DATA_SEED=vendor/android/web bun run test:pages
+ANDROID_DATA_SEED=vendor/android/web \
+ANDROID_WISP=wss://wisp.mercurywork.shop/ \
+ANDROID_EXPORT_CHECKPOINT=vendor/android/startup-source \
+  timeout 1100 node guest/android/checkpoint-probe.ts
+ANDROID_STARTUP_SOURCE=vendor/android/startup-source \
+ANDROID_STARTUP=vendor/android/startup bun scripts/pack-android-startup.ts
+ANDROID_KERNEL=/path/to/android/unkernel.wasm \
+UNKERNEL_BUNDLE=/path/to/android/unkernel.wasm \
+ANDROID_STARTUP=vendor/android/startup bun run build:pages
 ```
 
 Place the compressed images and `images.json` in `vendor/android/web/` first.
@@ -188,15 +201,30 @@ Chromium browser with WebAssembly JSPI; the first visit may reload once.
 
 The Pages workflow downloads the pinned kernel and compressed image artifacts,
 builds a cold-boot site, exports prepared data only after the launcher draws,
-then rebuilds and checks prepared boot and pointer input before upload. Prepared
+then checks prepared boot and pointer input. It captures and verifies a full
+prebooted VM, compresses it with Zstandard, packages it within the 990 MB site
+budget and verifies HTTP restoration and real Android HTTPS input before upload. Prepared
 data is bound to the kernel, image manifest, startup scripts and launcher APK
 by a checksum. Rebuild the launcher before packaging the site. A changed launcher
-or profile invalidates old prepared data and falls back to a cold boot.
-The page selects up to four CPUs only when the kernel bundle contains its SMP
-variant. The first successful launch saves a compressed initial Android state
-on this device. Later launches can restore it instead of repeating Android
-initialization. Both cold and restored startup wait for window focus and a
-response from the launcher UI thread. A failed restore falls back to cold boot.
+or profile invalidates old prepared data. Normal site builds reject missing or
+stale prepared data, so a preview or deployment cannot silently regress to full
+first-run initialization. Use `ANDROID_ALLOW_COLD_BOOT=1` only for the bootstrap
+build, then run `ANDROID_EXPORT_SEED=vendor/android/web bun run test:pages` and
+rebuild normally before serving the site.
+A packaged prebooted VM skips Android framework initialization on the first
+visit as well. Its manifest checks the build identity, CPU count, network device,
+size and SHA-256. Read-only disks are rebound to the current deployment only
+when their sizes match the images verified during packaging. The SDK still
+validates the kernel fingerprint and disk identities during restore. The page
+uses the artifact's single CPU when one is supplied. Offline mode starts from
+prepared data because its device configuration differs.
+
+A device-local checkpoint is preferred when available. Otherwise the page
+downloads the prebooted artifact, which the service worker retains by build
+identity for later launches. Cache writes run alongside streaming downloads.
+A failed restore falls back to prepared boot. Both paths wait for visible pixels,
+window focus and a response from the launcher UI thread. Without a packaged
+artifact, the first successful launch captures a local initial checkpoint.
 Kernel and image byte ranges are also cached by build identity, without
 downloading the complete disks in advance. Browser storage can be evicted or
 unavailable, so saving is best effort. Clear saved startup removes the initial

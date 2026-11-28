@@ -3,6 +3,7 @@
 import { createWland, createStreamLink } from 'wland/client';
 import { nativeAndroidCursor } from './cursor.ts';
 import type { KernelHandle } from '../js/web.ts';
+import { bindStartupDisks, fetchStartupCheckpoint } from '../guest/android/startup.ts';
 import { parseBootAssets, verifySeed } from './boot-assets.ts';
 import { clearAllAndroidCheckpoints, clearAndroidCheckpoint, loadAndroidCheckpoint, saveAndroidCheckpoint } from '../guest/android/checkpoint.ts';
 import { DEFAULT_RELAYS, parseNetworkSettings, readNetworkSettings, networkSearch } from './network.ts';
@@ -117,7 +118,7 @@ const clearStartup = element('clear-startup', HTMLButtonElement);
 clearStartup.addEventListener('click', () => {
 	clearStartup.disabled = true;
 	void clearAllAndroidCheckpoints().then(() => {
-		cacheMessage.textContent = 'Saved startup cleared. The next launch initializes Android again; downloaded system files are kept.';
+		cacheMessage.textContent = 'Saved startup cleared. Downloaded startup and system files are kept.';
 	}).catch(cause => {
 		cacheMessage.textContent = `Could not clear saved startup: ${String(cause)}`;
 	}).finally(() => controls());
@@ -334,7 +335,7 @@ async function boot(): Promise<void> {
 			checkedFetch('./android/home.apk', signal).then(response => response.arrayBuffer()),
 			checkedFetch('./android/boot.json', signal).then(response => response.json()).then(parseBootAssets),
 		]);
-		const cpus = Math.min(assets.maxCpus, Math.max(1, navigator.hardwareConcurrency || 1));
+		const cpus = assets.startup?.cpus ?? Math.min(assets.maxCpus, Math.max(1, navigator.hardwareConcurrency || 1));
 		void pruneAndroidAssets(assets.identity).catch(cause => appendLog(`Download cache unavailable: ${String(cause)}\n`));
 		const versionedAsset = (path: string) => {
 			const url = new URL(path, document.baseURI);
@@ -355,6 +356,25 @@ async function boot(): Promise<void> {
 				await forgetCheckpoint();
 			}
 			cacheMessage.textContent = restore ? 'Using the startup saved on this device.' : 'First startup for this configuration. Android will save its initial ready state for later launches.';
+		}
+		if (!restore && assets.startup && assets.startup.cpus === cpus && assets.startup.network === (network.mode === 'wisp')) {
+			setPhase(1, 'Downloading prebooted Android…');
+			try {
+				const artifact = assets.startup;
+				restore = await fetchStartupCheckpoint(versionedAsset(`./android/startup.${artifact.codec === 'gzip' ? 'gz' : 'zst'}`), artifact, signal, loaded => {
+					progressBar.max = artifact.bytes; progressBar.value = loaded;
+					if (loaded === artifact.bytes) setPhase(1, 'Unpacking prebooted Android…');
+					downloadDetail.textContent = `Prebooted Android: ${(loaded / 1048576).toFixed(1)} / ${(artifact.bytes / 1048576).toFixed(1)} MiB`;
+				});
+				setPhase(1, 'Preparing prebooted Android…');
+				await bindStartupDisks(restore, artifact, [versionedAsset('./android/system.erofs'), versionedAsset('./android/vendor.erofs')], signal);
+				cacheMessage.textContent = 'Using prebooted Android. Skipping framework initialization.';
+			} catch (cause) {
+				restore = undefined;
+				signal.throwIfAborted();
+				appendLog(`Prebooted Android unavailable: ${String(cause)}\n`);
+				cacheMessage.textContent = 'Prebooted startup unavailable. Starting Android from prepared data.';
+			}
 		}
 		for (;;) {
 			const restoring = restore !== undefined;

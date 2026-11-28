@@ -173,3 +173,10 @@ bundled in this repository or the static site. F-Droid is licensed under
 GPL-3.0-or-later. Project and source: https://f-droid.org/ and
 https://gitlab.com/fdroid/fdroidclient. The preset checksum is recorded in
 `guest/android/apk.ts`.
+
+## Startup decompression
+
+The static demo bundles fzstd 0.1.1 by Arjun Barrett under the MIT license to
+decode Zstandard startup artifacts in browsers. Source:
+<https://github.com/101arrowz/fzstd>. Its license is copied to
+`licenses/fzstd.txt` in the static site.

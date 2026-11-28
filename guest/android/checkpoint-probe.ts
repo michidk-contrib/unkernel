@@ -1,15 +1,18 @@
 // SPDX-License-Identifier: MIT
 // Copyright (C) 2026 Michael Lohr <michael@lohr.dev>
 // Opt-in full Android snapshot round trip: ANDROID_EXPORT_SEED=1 timeout 1200 node guest/android/checkpoint-probe.ts
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, stat } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { createHash } from 'node:crypto';
 import { createKernel } from '../../js/node.ts';
 import { createHeadless, encodePNG } from 'wland/headless';
 import { readSeed, restoreSeed, saveSeed, seedIdentity } from './seed.ts';
+import { parseBootAssets } from '../../pages/boot-assets.ts';
 import { encodeAndroidCheckpoint, decodeAndroidCheckpoint } from './checkpoint.ts';
 
 const root = resolve(import.meta.dirname, '../..');
 const assets = resolve(root, 'dist-pages');
+const boot = parseBootAssets(JSON.parse(await readFile(resolve(assets, 'android/boot.json'), 'utf8')));
 const options = {
 	kernel: resolve(assets, 'runtime/unkernel.wasm'), memoryMiB: 2048, cpus: 1,
 	cmdline: 'console=hvc0 rdinit=/init loglevel=3 androidboot.hardware=waydroid androidboot.selinux=permissive androidboot.serialno=unkernel',
@@ -66,7 +69,7 @@ try {
 	await exec('XDG_RUNTIME_DIR=/android/run/wayland setsid /android/system/bin/unkernel-wlandr --link vsock:2:1023 --buffers copy --display wayland-0 --xwayland off --profile session </dev/null >/tmp/relay.log 2>&1 &', undefined);
 	await exec('for i in $(seq 100); do [ ! -S /android/run/wayland/wayland-0 ] || { chmod 777 /android/run/wayland/wayland-0; exit 0; }; sleep .1; done; cat /tmp/relay.log >&2; exit 1');
 	await exec('cat >/tmp/start-android; chmod +x /tmp/start-android', await readFile(resolve(assets, 'android/start-init.sh')));
-	const parent = (await exec('XDG_RUNTIME_DIR=/run/wayland WAYLAND_DISPLAY=wayland-0 setsid /bin/unshare -m -p -f --mount-proc=/android/proc /bin/sh /tmp/start-android </dev/null >/tmp/android-init.log 2>&1 & echo $!')).trim();
+	const parent = (await exec('XDG_RUNTIME_DIR=/run/wayland WAYLAND_DISPLAY=wayland-0 setsid /bin/unshare -m -p -f --mount-proc=/android/proc /bin/sh /tmp/start-android </dev/null >/tmp/android-init.log 2>&1 & echo $! > /tmp/android-init-parent; cat /tmp/android-init-parent')).trim();
 	note(`Android init parent ${parent}`);
 	const child = (await exec(`for i in $(seq 400); do for child in $(cat /proc/${parent}/task/${parent}/children 2>/dev/null); do if [ "$(nsenter -t "$child" -m -p /system/bin/getprop sys.boot_completed 2>/dev/null)" = 1 ]; then echo "$child"; exit 0; fi; break; done; sleep 1; done; tail -50 /tmp/android-init.log >&2; exit 1`)).trim();
 	namespaceChild = child;
@@ -123,6 +126,18 @@ try {
 	if (visible < 5000) throw new Error('Restored Android window did not draw visible content');
 	await writeFile('/tmp/android-checkpoint-restored.png', await encodePNG(pixels));
 	note(`Restored screenshot ${pixels.width}x${pixels.height}, ${visible} visible pixels`);
+	if (process.env.ANDROID_EXPORT_CHECKPOINT) {
+		const directory = resolve(process.env.ANDROID_EXPORT_CHECKPOINT);
+		const data = new Uint8Array(await blob.arrayBuffer());
+		await mkdir(directory, { recursive: true });
+		await writeFile(resolve(directory, 'startup.gz'), data);
+		await writeFile(resolve(directory, 'startup.json'), JSON.stringify({
+			version: 1, codec: 'gzip', identity: boot.identity, cpus: 1, network: !!process.env.ANDROID_WISP,
+			diskBytes: await Promise.all(options.disks.map(disk => stat(disk.path).then(value => value.size))),
+			bytes: data.length, sha256: createHash('sha256').update(data).digest('hex'),
+		}, null, 2));
+		note(`Exported verified startup to ${directory}`);
+	}
 
 } finally {
 	try {

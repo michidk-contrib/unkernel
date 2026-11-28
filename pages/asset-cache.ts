@@ -13,12 +13,13 @@ interface ResponseCache {
 export async function androidAssetFetch(request: Request, {
 	storage = caches,
 	fetcher = fetch,
-}: { storage?: { open(name: string): Promise<ResponseCache> }; fetcher?: typeof fetch } = {}): Promise<Response> {
+	waitUntil,
+}: { storage?: { open(name: string): Promise<ResponseCache> }; fetcher?: typeof fetch; waitUntil?: (work: Promise<void>) => void } = {}): Promise<Response> {
 	const url = new URL(request.url);
 	const build = url.searchParams.get('v');
 	const range = request.headers.get('range');
 	if (request.method !== 'GET' || !build || !/^[a-f0-9]{64}$/.test(build) ||
-		!/(?:\/android\/(?:system|vendor)\.erofs|\/runtime\/unkernel\.wasm)$/.test(url.pathname) ||
+		!/(?:\/android\/(?:(?:system|vendor)\.erofs|startup\.(?:gz|zst))|\/runtime\/unkernel\.wasm)$/.test(url.pathname) ||
 		(range !== null && !/^bytes=\d+-\d+$/.test(range))) return fetcher(request);
 	const key = new URL(url);
 	key.searchParams.set('__range', range ?? 'full');
@@ -40,9 +41,13 @@ export async function androidAssetFetch(request: Request, {
 	if (response.status !== (range ? 206 : 200)) return response;
 	const headers = new Headers(response.headers);
 	headers.set('X-Android-Cached-Status', String(response.status));
-	try {
-		await cache.put(cacheKey, new Response(response.clone().body, { status: 200, headers }));
-	} catch { /* Storage quota or private mode must not prevent Android startup. */ }
+	const storing = (async () => {
+		try {
+			await cache.put(cacheKey, new Response(response.clone().body, { status: 200, headers }));
+		} catch { /* Storage quota or private mode must not prevent Android startup. */ }
+	})();
+	if (waitUntil) waitUntil(storing);
+	else await storing;
 	return response;
 }
 

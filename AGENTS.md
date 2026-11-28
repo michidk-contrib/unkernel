@@ -36,6 +36,14 @@ merely because a package installed successfully.
 
 Keep successive launches fast by retaining immutable downloads and a verified
 initial startup checkpoint, rather than preserving arbitrary user sessions.
+Normal site builds must include matching prepared Android data. Missing or stale
+data must fail before replacing the preview output; allow a cold build only with
+the explicit bootstrap flag, then export and verify prepared data before serving.
+The Pages workflow also ships a verified prebooted VM for first visits. Keep
+its compressed artifact inside the site budget, bind it to the exact prepared
+build, and verify HTTP restore plus actual Wayland input before upload. Only
+rebind read-only disks from the verified build. A packaged artifact must not
+trigger checkpoint encoding again on the visitor's first launch.
 Version caches with the actual kernel, images and runtime. Restore must pass
 the same display and UI-thread checks as cold boot, with a cold-boot fallback.
 Record timestamped startup phases and distinguish native measurements from

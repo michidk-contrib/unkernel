@@ -58,6 +58,7 @@ jobs:
       - run: bun run typecheck && bun run check:pages
       - run: bun run build:pages
         env:
+          ANDROID_ALLOW_COLD_BOOT: '1'
           ANDROID_KERNEL: ${{ github.workspace }}/vendor/android/custom-kernel/bundle/unkernel.wasm
           UNKERNEL_BUNDLE: ${{ github.workspace }}/vendor/android/custom-kernel/bundle/unkernel.wasm
       - name: Prepare Android first-run data
@@ -76,7 +77,35 @@ jobs:
         env:
           ANDROID_DATA_SEED: ${{ github.workspace }}/vendor/android/web
           ANDROID_REPORTS: ${{ github.workspace }}/vendor/android/framework-reports/prepared
-      - run: bun test test/android-seed.test.ts test/android-checkpoint.test.ts test/android-boot-assets.test.ts test/android-asset-cache.test.ts test/android-network-settings.test.ts test/android-apk.test.ts
+      - name: Capture and verify prebooted Android
+        run: timeout 1100 node guest/android/checkpoint-probe.ts
+        env:
+          ANDROID_DATA_SEED: ${{ github.workspace }}/vendor/android/web
+          ANDROID_EXPORT_CHECKPOINT: ${{ github.workspace }}/vendor/android/startup-source
+          ANDROID_WISP: wss://wisp.mercurywork.shop/
+      - name: Compress prebooted Android for Pages
+        run: bun scripts/pack-android-startup.ts
+        env:
+          ANDROID_STARTUP_SOURCE: ${{ github.workspace }}/vendor/android/startup-source
+          ANDROID_STARTUP: ${{ github.workspace }}/vendor/android/startup
+      - name: Package prebooted startup
+        run: bun run build:pages
+        env:
+          ANDROID_REQUIRE_SEED: '1'
+          ANDROID_STARTUP: ${{ github.workspace }}/vendor/android/startup
+          ANDROID_KERNEL: ${{ github.workspace }}/vendor/android/custom-kernel/bundle/unkernel.wasm
+          UNKERNEL_BUNDLE: ${{ github.workspace }}/vendor/android/custom-kernel/bundle/unkernel.wasm
+      - name: Verify prebooted HTTP startup and Android internet input
+        run: |
+          PORT=3000 bun scripts/serve-pages.ts > /tmp/android-http.log 2>&1 &
+          server=$!
+          trap 'kill "$server"' EXIT
+          for attempt in $(seq 30); do
+            if curl --fail --silent http://127.0.0.1:3000/android/boot.json > /dev/null; then break; fi
+            sleep 1
+          done
+          ANDROID_STARTUP_ORIGIN=http://127.0.0.1:3000/ timeout 240 node guest/android/startup-probe.ts
+      - run: bun test test/android-startup.test.ts test/android-seed.test.ts test/android-checkpoint.test.ts test/android-boot-assets.test.ts test/android-asset-cache.test.ts test/android-network-settings.test.ts test/android-apk.test.ts
       - uses: actions/upload-artifact@v4
         if: always()
         with:
