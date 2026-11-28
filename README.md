@@ -88,7 +88,11 @@ code is copied into this fork.
 The static demo boots the full Android 13 system and presents its Wayland display
 with wland, the same compositor used by Side by Side. The VM reserves 2 GiB of
 RAM. A cold boot takes several minutes, depending on the host CPU and disk
-fetches. Stop discards guest changes. The first browser version runs offline.
+fetches. The emulator runs in a worker so startup does not block the page.
+Android apps still use software graphics on the emulated CPU and can respond
+slowly. The display uses the browser cursor to avoid distorted Wayland cursor
+buffers. Stop discards guest changes. The first browser version runs offline.
+See [Android graphics](guest/android/graphics.md) for the GPU driver requirements.
 
 The image workflow converts pinned Waydroid ARM64 system/vendor images to EROFS,
 retaining the 64-bit runtime and enforcing a 900 MB disk budget. The browser reads
@@ -111,7 +115,14 @@ paths. A COI service worker provides browser isolation on Pages. Use a current
 Chromium browser with WebAssembly JSPI; the first visit may reload once.
 
 The Pages workflow downloads the pinned kernel and compressed image artifacts,
-builds the static site, and runs the full Android boot/input check before upload.
+builds a cold-boot site, exports prepared data only after the launcher draws,
+then rebuilds and checks prepared boot and pointer input before upload. Prepared
+data is bound to the kernel, image manifest and startup scripts by a checksum.
+The page selects up to four CPUs only when the kernel bundle contains its SMP
+variant. Experimental local checkpoints can restore the drawn launcher, but
+they remain disabled while Android interaction and display stability are being
+verified. The startup check waits for both window focus and a response from the
+launcher UI thread before reporting readiness or capturing a checkpoint.
 Enable Pages with **GitHub Actions** as the source and allow `feat/android` in the
 `github-pages` environment. The managed GitHub App cannot enable Pages in this
 repository; that setting requires the repository owner.

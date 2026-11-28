@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (C) 2026 Michael Lohr <michael@lohr.dev>
-import { cp, mkdir, readFile, rm, link, stat } from 'node:fs/promises';
+import { cp, mkdir, readFile, rm, link, stat, readdir } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import { brotliDecompressSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
+import { seedIdentity, readSeed } from '../guest/android/seed-assets.ts';
+import { smpKernelFromBundle } from '../js/core/kpatch.ts';
 
 const root = resolve(import.meta.dirname, '..');
 const out = resolve(root, 'dist-pages');
@@ -45,4 +47,26 @@ if (!result.success) throw new AggregateError(result.logs, 'Pages build failed')
 for (const file of ['index.html', 'style.css']) await cp(`${root}/pages/${file}`, `${out}/${file}`);
 await Bun.write(`${out}/.nojekyll`, '');
 await Bun.write(`${out}/android/kernel.sha256`, createHash('sha256').update(await readFile(kernel)).digest('hex'));
+const identity = await seedIdentity(`${out}/android`, kernel, `${images}/images.json`);
+let seed: { bytes: number; sha256: string } | undefined;
+try {
+	const prepared = await readSeed(images, identity);
+	await cp(`${images}/data.tar.gz`, `${out}/android/data.tar.gz`);
+	seed = { bytes: prepared.manifest.bytes, sha256: prepared.manifest.sha256 };
+} catch (cause) {
+	if (process.env.ANDROID_REQUIRE_SEED === '1') throw cause;
+	console.log(`Building a cold-boot image: ${String(cause)}`);
+}
+const smp = !!await smpKernelFromBundle(new Uint8Array(await readFile(kernel)));
+await Bun.write(`${out}/android/boot.json`, JSON.stringify({ version: 1, identity, maxCpus: smp ? 4 : 1, checkpoint: false, seed }, null, 2));
+async function directoryBytes(path: string): Promise<number> {
+	let bytes = 0;
+	for (const entry of await readdir(path, { withFileTypes: true })) {
+		const file = resolve(path, entry.name);
+		bytes += entry.isDirectory() ? await directoryBytes(file) : (await stat(file)).size;
+	}
+	return bytes;
+}
+const totalBytes = await directoryBytes(out);
+if (totalBytes > 990_000_000) throw new Error(`Android demo exceeds the GitHub Pages size budget (${totalBytes} bytes)`);
 console.log(`Android Pages demo built; compressed disks ${(diskBytes / 1024 / 1024).toFixed(1)} MiB`);
