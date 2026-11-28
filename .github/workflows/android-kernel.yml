@@ -60,12 +60,15 @@ jobs:
             vendor/build/lld22
           key: android-llvm22-${{ hashFiles('kernel/patches/llvm/**') }}
       - run: bash kernel/build.sh kernel
-      - run: bash kernel/build.sh base
+      - run: KW_SMP=0 bash kernel/build.sh smp
+      - run: KW_SMP=1 bash kernel/build.sh base
       - name: Verify Binder configuration
         run: |
           for option in CONFIG_ANDROID_BINDER_IPC=y CONFIG_ANDROID_BINDERFS=y; do
             grep -Fx "$option" vendor/build/kernel/.config
           done
+      - name: Verify SMP kernel configuration
+        run: grep -Fx CONFIG_SMP=y vendor/build/kernel-smp/.config
       - run: bun run android:prepare
       - name: Require Bionic and Binder prerequisites
         env:
@@ -79,4 +82,5 @@ jobs:
           path: |
             vendor/build/bundle/unkernel.wasm
             vendor/build/kernel/.config
+            vendor/build/kernel-smp/.config
           if-no-files-found: warn
