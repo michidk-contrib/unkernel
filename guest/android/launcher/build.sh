@@ -12,7 +12,7 @@ mkdir -p "$out"
 work="$(mktemp -d "$out/build.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/classes" "$work/dex"
-javac --release 8 -classpath "$platform" -d "$work/classes" "$root/guest/android/launcher/HomeActivity.java"
+javac --release 8 -classpath "$platform" -d "$work/classes" "$root"/guest/android/launcher/*.java
 "$tools/aapt2" link -I "$platform" --manifest "$root/guest/android/launcher/AndroidManifest.xml" -o "$work/home.apk"
 "$tools/d8" --lib "$platform" --min-api 26 --output "$work/dex" "$work"/classes/dev/unkernel/home/*.class
 (cd "$work/dex" && zip -q "$work/home.apk" classes.dex)

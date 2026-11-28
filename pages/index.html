@@ -26,6 +26,17 @@
 <p id="cache-message" class="session-note">The first launch initializes Android. Saved startup and downloaded system files can make later launches faster on this device.</p>
 <button id="clear-startup" type="button">Clear saved startup</button>
 </section>
+<section class="app-install" aria-labelledby="app-title">
+<h2 id="app-title">Try an app</h2>
+<p class="hint">Install a single APK up to 64 MiB. Use ARM64 or universal apps for Android 13. Apps are removed when you stop.</p>
+<button id="fdroid" type="button">Try F-Droid</button>
+<p class="hint">An optional app catalog from <a href="https://f-droid.org/" target="_blank" rel="noreferrer">F-Droid</a>. Its catalog and downloads use Android's Internet connection.</p>
+<label for="apk-file">Upload an APK</label><input id="apk-file" type="file" accept=".apk,application/vnd.android.package-archive">
+<form id="apk-form"><label for="apk-url">Or use an APK link</label><input id="apk-url" type="url" placeholder="https://example.com/app.apk" autocomplete="off" spellcheck="false">
+<div class="settings-actions"><button id="install-url" type="submit">Install link</button><button id="share-apk" type="button">Copy app link</button></div></form>
+<p id="apk-message" class="hint" role="status" aria-live="polite">Start Android to install an app. APK links download through Android and require WISP.</p>
+<button id="android-apps" type="button" disabled>Show Android apps</button>
+</section>
 <details class="network-settings"><summary>Internet connection <span id="network-badge">WISP</span></summary>
 <form id="network-form">
 <label for="network-mode">Connection</label><select id="network-mode"><option value="wisp">Internet through WISP</option><option value="offline">Offline</option></select>
@@ -33,7 +44,7 @@
 <div class="settings-actions"><button type="submit">Save settings</button><button id="share" type="button">Copy session link</button></div>
 <p id="network-message" class="hint" role="status" aria-live="polite"></p>
 </form></details>
-<details class="about"><summary>Before you start</summary><p>Use a current Chrome or Chromium browser with WebAssembly JSPI. The first visit may reload once to enable browser isolation.</p><p>Android startup can take several minutes. Keep this tab visible. Software graphics can still freeze or respond slowly; this is an experiment.</p><p>The goal is to make trying Android apps as easy as opening a link. APK upload is not available yet.</p></details>
+<details class="about"><summary>Before you start</summary><p>Use a current Chrome or Chromium browser with WebAssembly JSPI. The first visit may reload once to enable browser isolation.</p><p>Android startup can take several minutes. Keep this tab visible. Software graphics can still freeze or respond slowly; this is an experiment.</p><p>APK files stay in this local Android session. Split APK bundles and Google Play services are not included. The ?apk= link installs its APK after startup.</p></details>
 </aside>
 <section class="device-area" aria-label="Android virtual machine">
 <div class="device-toolbar"><div class="device-status"><span id="light" class="light"></span><span id="status" role="status" aria-live="polite">Ready to start</span></div><button id="fullscreen" class="icon-button" aria-label="Open Android display fullscreen" title="Fullscreen"><svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M3 8V3h5m4 0h5v5m0 4v5h-5m-4 0H3v-5" stroke="currentColor" stroke-width="1.5"/></svg></button></div>

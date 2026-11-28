@@ -30,7 +30,7 @@ public final class HomeActivity extends Activity {
         getWindow().setNavigationBarColor(Color.rgb(240, 244, 235));
         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
         showHome();
-        if ("dev.unkernel.home.CHECK_NETWORK".equals(getIntent().getAction())) checkInternet();
+        handleIntent(getIntent());
     }
 
     private void page(String title, String description) {
@@ -125,7 +125,17 @@ public final class HomeActivity extends Activity {
     @Override protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         showHome();
+        handleIntent(intent);
+    }
+    private void handleIntent(Intent intent) {
         if ("dev.unkernel.home.CHECK_NETWORK".equals(intent.getAction())) checkInternet();
+        if ("dev.unkernel.home.SHOW_APPS".equals(intent.getAction())) showApps();
+        if ("dev.unkernel.home.DOWNLOAD_APK".equals(intent.getAction())) {
+            page("Getting your app", "This download uses Android's Internet connection.");
+            TextView status = text("Connecting...", 18);
+            ApkDownload.start(this, intent.getStringExtra("url"), intent.getStringExtra("token"),
+                message -> runOnUiThread(() -> status.setText(message)));
+        }
     }
     @Override public void onBackPressed() { showHome(); }
 }

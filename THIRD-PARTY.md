@@ -164,3 +164,12 @@ Recipes and source locations are at
 <https://github.com/termux/termux-packages/tree/master/packages/aosp-libs>
 and <https://github.com/termux/termux-packages/tree/master/packages/aosp-utils>.
 Bionic retains its BSD notices, mksh its MirOS notices, and Toybox its 0BSD notices.
+
+## Optional F-Droid demo
+
+The F-Droid preset downloads the official F-Droid client 2.0.3 from
+https://f-droid.org/repo/org.fdroid.fdroid_2000053.apk at runtime. The APK is not
+bundled in this repository or the static site. F-Droid is licensed under
+GPL-3.0-or-later. Project and source: https://f-droid.org/ and
+https://gitlab.com/fdroid/fdroidclient. The preset checksum is recorded in
+`guest/android/apk.ts`.

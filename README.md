@@ -101,6 +101,57 @@ launcher has a “Check internet” action that requests HTTPS from inside Andro
 A saved relay setting alone does not establish that Android networking works.
 See [Android graphics](guest/android/graphics.md) for the GPU driver requirements.
 
+## Try apps and F-Droid
+
+Start Android, then use **Upload an APK** to install a local file. Uploads run
+directly in the local guest and work without Internet access. Single APKs up to
+64 MiB are supported, including debug/test APKs. Use ARM64 or universal builds
+compatible with Android 13. Split APK bundles and Google Play services are not
+included. Android's package manager verifies and installs the APK; install and
+launch failures appear beside the controls. Apps without a launcher entry can
+be installed, but cannot be opened as a normal app from the launcher.
+
+**Try F-Droid** selects an optional app-catalog preset. It downloads the official
+F-Droid 2.0.3 release, verifies its pinned SHA-256 checksum and installs it after
+Android is ready. The minimal image remains the default. App rendering and
+catalog updates still run on the emulated CPU and can be slow.
+
+An app link can provide an HTTPS APK URL:
+
+```text
+?apk=https%3A%2F%2Fexample.com%2Fdemo.apk
+```
+
+After the user starts Android, the linked APK installs automatically. Use
+**Copy app link** to encode an APK URL and include the current network settings.
+The download runs inside Android through WISP, so the APK host does not need
+browser CORS headers. HTTPS redirects are supported; file, HTTP, credentialed
+and fragment URLs are rejected. URL downloads have a 64 MiB size limit and a
+five-minute deadline. Local file upload remains available for offline sessions.
+
+Installation starts after the clean startup checkpoint has been captured and
+saved. Apps and their data disappear on Stop. The saved startup does not retain
+uploaded apps, and linked APKs are downloaded and installed again on each new
+session. Select **Show Android apps** to return to the launcher app list.
+
+For a real installation check, download the pinned F-Droid APK to an ignored
+fixture path and verify the checksum from `guest/android/apk.ts`, then run:
+
+```sh
+ANDROID_WISP=wss://your-relay/ \
+ANDROID_APK_FILE=/absolute/path/to/fdroid.apk \
+  bun run test:pages
+
+ANDROID_WISP=wss://your-relay/ \
+ANDROID_APK_URL=https://f-droid.org/repo/org.fdroid.fdroid_2000053.apk \
+  bun run test:pages
+```
+
+The first run installs the file through the same stdin path as browser uploads.
+The second uses Android's HTTPS download path. Each opens F-Droid and checks
+rendered pixels plus its UI thread. The fixture grants notification permission
+to capture the app without a first-launch permission dialog.
+
 The image workflow converts pinned Waydroid ARM64 system/vendor images to EROFS,
 retaining the 64-bit runtime and enforcing a 900 MB disk budget. The browser reads
 these disks with HTTP Range requests. The Pages build requires these artifacts

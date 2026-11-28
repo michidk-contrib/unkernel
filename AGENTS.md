@@ -23,8 +23,16 @@ check. Reducing background work does not establish a graphics speedup.
 Internet access should use configurable WISP relays, following Side by Side's
 settings model. Include an offline mode, validate relay URLs and distinguish
 relay configuration from verified Android connectivity. App testing and APK
-upload are product goals; advertise them as available only after verification.
+upload must be verified against Android's package manager and actual app launch.
 Keep the site statically deployable on GitHub Pages.
+
+Single APKs can come from local files or an `apk` URL parameter. URL downloads
+run in Android through WISP, without requiring the source host to support CORS.
+Keep the 64 MiB limit, HTTPS-only redirects and bounded downloads. The optional
+F-Droid preset uses a pinned official release and checksum. Install apps only
+after capturing and saving the clean startup checkpoint; app data still expires
+on Stop. Do not claim that arbitrary apps or the complete F-Droid catalog work
+merely because a package installed successfully.
 
 Keep successive launches fast by retaining immutable downloads and a verified
 initial startup checkpoint, rather than preserving arbitrary user sessions.

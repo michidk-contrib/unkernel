@@ -49,6 +49,10 @@ waydroid.stub_sensors_hal=true
 debug.hwui.renderer=skiagl
 # A plain color background and no wallpaper animation in Browser Home.
 ro.config.low_ram=true
+# installd defaults to dex2oat32 even for 64-bit apps unless this is enabled.
+dalvik.vm.dex2oat64.enabled=true
+# Verify installs without doing expensive ahead-of-time optimization on the emulator.
+pm.dexopt.install=verify
 debug.sf.nobootanimation=1
 # Eagerly compiling every compositor shader consumes minutes on the emulated CPU.
 service.sf.prime_shader_cache=0

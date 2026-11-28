@@ -9,9 +9,10 @@ web
 ## Users and purpose
 
 People curious about running a real Android system inside a browser, and
-Android developers who may eventually use it to try their apps. The first
-milestone is an interactive minimal Android system. APK upload and practical
-app testing are goals, not verified capabilities.
+Android developers who want to try their apps. The first milestone is an
+interactive minimal Android system with single-APK upload, automatic APK links
+and an optional F-Droid app catalog. General application compatibility remains
+experimental and must be verified per app.
 
 ## Stack and constraints
 
@@ -32,4 +33,6 @@ Keep the Android display central, put startup controls within reach, show real
 progress and provide useful errors and diagnostics. Start with one minimal
 Waydroid profile. Expose additional distributions only after their boot and
 interaction tests pass. Preserve framework, package installation, permissions
-and network services for future app testing.
+and network services for app testing. Keep third-party demo apps optional and
+install user-supplied APKs after the clean startup checkpoint. Preserve a small
+default image instead of adding an unverified distribution selector.

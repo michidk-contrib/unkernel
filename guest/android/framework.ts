@@ -6,6 +6,7 @@ import { createKernel } from '../../js/node.ts';
 import { startAndroidDisplay } from './display.ts';
 import { encodePNG } from 'wland/headless';
 import { seedIdentity, readSeed, restoreSeed, saveSeed } from './seed.ts';
+import { installLocalApk, installApkUrl, openInstalledApp, FDROID } from './apk.ts';
 
 const root = resolve(import.meta.dirname, '../..');
 const launcherPath = process.env.ANDROID_RUNTIME_DIR ? resolve(process.env.ANDROID_RUNTIME_DIR, 'home.apk') : resolve(root, 'vendor/android/launcher/home.apk');
@@ -193,7 +194,51 @@ exit 1`], { signal: AbortSignal.timeout(450000) });
 		if (!connected) throw new Error('Android app HTTPS check through WISP failed');
 		await vm.exec('/bin/nsenter', [...enter, '/system/bin/am', 'start', '-n', 'dev.unkernel.home/.HomeActivity', '-a', 'android.intent.action.MAIN'], { signal: AbortSignal.timeout(30000) });
 	}
-	if (process.env.ANDROID_EXPORT_SEED) {
+	if (process.env.ANDROID_APK_FILE || process.env.ANDROID_APK_URL) {
+		stage = 'apk-local';
+		const session = { vm, namespace: child, signal: AbortSignal.timeout(600000) };
+		const apkDisplay = display;
+		const verifyApp = async (label: string) => {
+			// Handle the first-launch notification prompt so the captured frame shows the app itself.
+			const permission = await vm.exec('/bin/nsenter', [...enter, '/system/bin/pm', 'grant', FDROID.packageName, 'android.permission.POST_NOTIFICATIONS'], { signal: session.signal });
+			if (permission.exitCode !== 0) throw new Error(`Cannot grant fixture notification permission: ${permission.stderr}`);
+			if (!await openInstalledApp(session, FDROID.packageName)) throw new Error('Installed F-Droid has no launchable activity');
+			await waitForActivity(FDROID.packageName, label);
+			for (let i = 0; i < 20; i++) {
+				const hierarchy = await vm.exec('/bin/nsenter', [...enter, '/system/bin/dumpsys', '-t', '15', 'activity', FDROID.packageName], { signal: AbortSignal.timeout(30000) });
+				await writeFile(`${reports}/${label}-hierarchy.txt`, hierarchy.stdout);
+				if (i === 2 && !hierarchy.stdout.includes('View Hierarchy:')) {
+					const stack = await vm.exec('/bin/nsenter', [...enter, '/system/bin/sh', '-c', 'pid=$(pidof org.fdroid.fdroid); [ -n "$pid" ] && debuggerd -j "$pid"'], { signal: AbortSignal.timeout(45000) });
+					await writeFile(`${reports}/${label}-stack.txt`, stack.stdout + stack.stderr);
+				}
+				if (hierarchy.stdout.includes('View Hierarchy:')) {
+					const frame = apkDisplay.desktop.screenshot();
+					let changed = 0;
+					for (let p = 0; p < frame.data.length; p += 4) if (frame.data[p] !== launcherFrame.data[p] || frame.data[p + 1] !== launcherFrame.data[p + 1] || frame.data[p + 2] !== launcherFrame.data[p + 2]) changed++;
+					if (changed >= 10000) {
+						await writeFile(`${reports}/${label}.png`, await encodePNG(frame));
+						return;
+					}
+				}
+				await new Promise(resolve => setTimeout(resolve, 1000));
+			}
+			throw new Error('F-Droid launched but did not draw and respond on its UI thread');
+		};
+		if (process.env.ANDROID_APK_FILE) {
+			const localPackage = await installLocalApk(session, await readFile(process.env.ANDROID_APK_FILE));
+			await writeFile(`${reports}/apk-local.json`, JSON.stringify({ packageName: localPackage }));
+			if (localPackage !== FDROID.packageName) throw new Error(`APK fixture installed as ${localPackage}, expected F-Droid`);
+			await verifyApp('apk-local');
+		}
+		if (process.env.ANDROID_APK_URL) {
+			stage = 'apk-url';
+			const remotePackage = await installApkUrl(session, process.env.ANDROID_APK_URL, label => { console.log(label); });
+			await writeFile(`${reports}/apk-url.json`, JSON.stringify({ packageName: remotePackage }));
+			if (remotePackage !== FDROID.packageName) throw new Error(`APK URL fixture installed as ${remotePackage}, expected F-Droid`);
+			await verifyApp('apk-url');
+		}
+		await writeFile(`${reports}/apk-verified.txt`, `F-Droid installed and rendered through ${[process.env.ANDROID_APK_FILE ? 'local APK' : '', process.env.ANDROID_APK_URL ? 'Android HTTPS URL' : ''].filter(Boolean).join(' and ')}.\n`);
+	} else if (process.env.ANDROID_EXPORT_SEED) {
 		const identity = await seedIdentity(process.env.ANDROID_RUNTIME_DIR ?? import.meta.dirname, kernel, resolve(root, 'vendor/android/web/images.json'), launcherPath);
 		const seed = await saveSeed(vm, enter, process.env.ANDROID_EXPORT_SEED, identity);
 		await writeFile(`${reports}/seed-export.json`, JSON.stringify(seed, null, 2));

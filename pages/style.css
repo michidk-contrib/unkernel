@@ -16,3 +16,5 @@ footer{padding:24px 40px;display:flex;gap:16px;justify-content:space-between;fon
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
 
 .stage:fullscreen .device-frame{width:360px;height:640px;transform:scale(var(--fullscreen-scale,1));overflow:visible}.stage:fullscreen #display{transform:none}
+.app-install{border-top:1px solid var(--line);margin-top:20px;padding-top:18px}.app-install h2{font-size:14px;margin:0 0 10px}.app-install label{display:block;font-size:12px;font-weight:700;margin:14px 0 7px}.app-install input{width:100%;min-width:0;padding:9px;border:1px solid var(--line);border-radius:5px;background:#fff;font-size:12px}.app-install input[type=file]{padding:7px;font-size:11px}.app-install .settings-actions{flex-wrap:wrap}.app-install .hint{overflow-wrap:anywhere}
+.app-install .invalid{color:#8b342b}

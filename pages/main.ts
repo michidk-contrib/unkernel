@@ -8,6 +8,8 @@ import { clearAllAndroidCheckpoints, clearAndroidCheckpoint, loadAndroidCheckpoi
 import { DEFAULT_RELAYS, parseNetworkSettings, readNetworkSettings, networkSearch } from './network.ts';
 import type { NetworkSettings } from './network.ts';
 import { pruneAndroidAssets } from './asset-cache.ts';
+import { apkUrl, FDROID, installLocalApk, installApkUrl, openInstalledApp, openAndroidApps, MAX_APK_BYTES } from '../guest/android/apk.ts';
+import type { ApkSession } from '../guest/android/apk.ts';
 
 function element<T extends HTMLElement>(id: string, ctor: { new(...args: never[]): T }): T {
 	const value = document.getElementById(id);
@@ -27,6 +29,89 @@ const progressBar = element('boot-progress', HTMLProgressElement);
 const phases = element('boot-phases', HTMLOListElement);
 const downloadDetail = element('download-detail', HTMLSpanElement);
 const reportButton = element('report', HTMLButtonElement);
+const apkFile = element('apk-file', HTMLInputElement);
+const apkForm = element('apk-form', HTMLFormElement);
+const apkAddress = element('apk-url', HTMLInputElement);
+const apkMessage = element('apk-message', HTMLParagraphElement);
+const fdroid = element('fdroid', HTMLButtonElement);
+const appsButton = element('android-apps', HTMLButtonElement);
+const shareApk = element('share-apk', HTMLButtonElement);
+let apkSession: ApkSession | undefined;
+let installing = false;
+let linkedApk: string | undefined;
+try {
+	const source = new URLSearchParams(location.search).get('apk');
+	if (source) {
+		linkedApk = apkUrl(source);
+		apkAddress.value = linkedApk;
+		apkMessage.textContent = 'This link will install its APK automatically after Android starts. APK links require WISP.';
+	}
+} catch (cause) { apkMessage.textContent = String(cause); }
+async function installApp(source: File | string): Promise<void> {
+	const session = apkSession;
+	if (!session || installing) return;
+	installing = true;
+	controls();
+	try {
+		apkMessage.classList.remove('invalid');
+		let name: string | undefined;
+		if (typeof source === 'string') {
+			if (networkSettings.mode !== 'wisp') throw new Error('APK links require WISP. Stop Android and enable Internet, or upload a local APK.');
+			apkMessage.textContent = 'Connecting to the APK server through Android…';
+			name = await installApkUrl(session, source, label => { apkMessage.textContent = label; });
+		} else {
+			if (source.size > MAX_APK_BYTES) throw new Error('APK files must be at most 64 MiB.');
+			apkMessage.textContent = `Installing ${source.name} in Android…`;
+			name = await installLocalApk(session, new Uint8Array(await source.arrayBuffer()));
+		}
+		session.signal.throwIfAborted();
+		const opened = name ? await openInstalledApp(session, name) : false;
+		apkMessage.textContent = opened ? `Installed and opened ${name}.` : 'APK installed. Open Show Android apps to choose an app with a launcher entry.';
+		if (!opened) await openAndroidApps(session);
+	} catch (cause) {
+		if (!session.signal.aborted) {
+			apkMessage.classList.add('invalid');
+			apkMessage.textContent = `Installation failed: ${cause instanceof Error ? cause.message : String(cause)}`;
+		}
+	} finally {
+		installing = false;
+		apkFile.value = '';
+		controls();
+	}
+}
+apkFile.addEventListener('change', () => { const file = apkFile.files?.[0]; if (file) void installApp(file); });
+apkForm.addEventListener('submit', event => {
+	event.preventDefault();
+	try {
+		const source = apkUrl(apkAddress.value.trim());
+		if (apkSession) void installApp(source);
+		else { linkedApk = source; apkMessage.textContent = 'APK queued. Start Android to install it automatically.'; }
+	} catch (cause) { apkMessage.textContent = String(cause); }
+});
+fdroid.addEventListener('click', () => {
+	apkAddress.value = FDROID.url;
+	if (!apkSession && networkMode.value === 'offline') {
+		apkMessage.textContent = 'Enable Internet through WISP before trying F-Droid. You can also upload a downloaded APK after starting offline.';
+		return;
+	}
+	if (apkSession) void installApp(FDROID.url);
+	else {
+		linkedApk = FDROID.url;
+		apkMessage.textContent = `${FDROID.name} selected. It will install after Android starts.`;
+		void boot();
+	}
+});
+appsButton.addEventListener('click', () => { if (apkSession) void openAndroidApps(apkSession).catch(cause => { apkMessage.textContent = String(cause); }); });
+shareApk.addEventListener('click', () => {
+	void (async () => {
+		try {
+			const url = saveNetworkSettings();
+			url.searchParams.set('apk', apkUrl(apkAddress.value.trim()));
+			await navigator.clipboard.writeText(url.href);
+			apkMessage.textContent = 'App link copied. It installs this APK after Android starts.';
+		} catch (cause) { apkMessage.textContent = `Could not copy app link: ${String(cause)}`; }
+	})();
+});
 const cacheMessage = element('cache-message', HTMLParagraphElement);
 const clearStartup = element('clear-startup', HTMLButtonElement);
 clearStartup.addEventListener('click', () => {
@@ -150,12 +235,20 @@ function controls(): void {
 	start.disabled = busy || !!vm;
 	stop.disabled = !controller;
 	clearStartup.disabled = busy || !!vm;
+	apkFile.disabled = !apkSession || installing;
+	fdroid.disabled = busy || installing;
+	appsButton.disabled = !apkSession || installing;
+	for (const input of apkForm.querySelectorAll('input, button')) {
+		if (input instanceof HTMLInputElement || input instanceof HTMLButtonElement) input.disabled = busy || installing;
+	}
 	for (const input of networkForm.querySelectorAll('input, select, textarea, button')) {
 		if (input instanceof HTMLInputElement || input instanceof HTMLSelectElement || input instanceof HTMLTextAreaElement || input instanceof HTMLButtonElement) input.disabled = busy || !!vm;
 	}
 }
 async function shutdown(): Promise<void> {
 	screen.inert = true;
+	if (apkSession) apkMessage.textContent = 'Session stopped. Installed apps and app data were discarded.';
+	apkSession = undefined;
 	controller?.abort();
 	controller = undefined;
 	desktop?.dispose();
@@ -460,6 +553,9 @@ exit 1`);
 				}
 				signal.throwIfAborted();
 				screen.inert = false;
+				const namespace = (await exec(`cat /proc/${initPid}/task/${initPid}/children`)).trim().split(/\s+/)[0];
+				if (!namespace || !/^[1-9][0-9]*$/.test(namespace)) throw new Error('Android app installation namespace is unavailable');
+				apkSession = { vm: instance, namespace, signal };
 				break;
 			} catch (cause) {
 				if (!restoring || signal.aborted) throw cause;
@@ -487,6 +583,7 @@ exit 1`);
 		busy = false;
 		controls();
 	}
+	if (apkSession && linkedApk) void installApp(linkedApk);
 }
 start.addEventListener('click', () => { void boot(); });
 stop.addEventListener('click', () => { void shutdown().then(() => { status.textContent = 'Stopped'; }).catch(report); });
