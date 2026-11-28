@@ -85,3 +85,15 @@ export async function clearAndroidCheckpoint(identity: AndroidCheckpointIdentity
 		database.close();
 	}
 }
+
+export async function clearAllAndroidCheckpoints(): Promise<void> {
+	const database = await openDatabase();
+	try {
+		await new Promise<void>((resolve, reject) => {
+			const transaction = database.transaction(storeName, 'readwrite');
+			transaction.objectStore(storeName).clear();
+			transaction.oncomplete = () => resolve();
+			transaction.onabort = () => reject(transaction.error);
+		});
+	} finally { database.close(); }
+}

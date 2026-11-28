@@ -142,10 +142,16 @@ data is bound to the kernel, image manifest, startup scripts and launcher APK
 by a checksum. Rebuild the launcher before packaging the site. A changed launcher
 or profile invalidates old prepared data and falls back to a cold boot.
 The page selects up to four CPUs only when the kernel bundle contains its SMP
-variant. Experimental local checkpoints can restore the drawn launcher, but
-they remain disabled while Android interaction and display stability are being
-verified. The startup check waits for both window focus and a response from the
-launcher UI thread before reporting readiness or capturing a checkpoint.
+variant. The first successful launch saves a compressed initial Android state
+on this device. Later launches can restore it instead of repeating Android
+initialization. Both cold and restored startup wait for window focus and a
+response from the launcher UI thread. A failed restore falls back to cold boot.
+Kernel and image byte ranges are also cached by build identity, without
+downloading the complete disks in advance. Browser storage can be evicted or
+unavailable, so saving is best effort. Clear saved startup removes the initial
+state while retaining downloaded system files. Stop still discards session
+changes. See [startup analysis and verification](guest/android/boot-performance.md)
+for the causes of slow boot, cache behavior and measurement limits.
 Enable Pages with **GitHub Actions** as the source and allow `feat/android` in the
 `github-pages` environment. The managed GitHub App cannot enable Pages in this
 repository; that setting requires the repository owner.

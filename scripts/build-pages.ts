@@ -21,7 +21,11 @@ await mkdir(`${out}/android`, { recursive: true });
 for (const file of ['web.mjs', '_chunks']) await cp(`${root}/dist/${file}`, `${out}/runtime/${file}`, { recursive: true });
 await cp(kernel, `${out}/runtime/unkernel.wasm`);
 for (const file of ['LICENSE', 'LICENSE-MIT', 'THIRD-PARTY.md']) await cp(`${root}/${file}`, `${out}/${file}`);
-await cp(`${root}/node_modules/coi-serviceworker/coi-serviceworker.js`, `${out}/coi-serviceworker.js`);
+const isolationWorker = await readFile(`${root}/node_modules/coi-serviceworker/coi-serviceworker.js`, 'utf8');
+if (!isolationWorker.includes('fetch(request)')) throw new Error('Review the COI worker cache integration after upgrading coi-serviceworker');
+await Bun.write(`${out}/coi-serviceworker.js`, `if (typeof window === 'undefined') importScripts('./asset-cache.js');\n${isolationWorker.replace('fetch(request)', 'self.androidAssetFetch(request)')}`);
+const cacheBuild = await Bun.build({ entrypoints: [`${root}/pages/asset-cache.ts`], outdir: out, target: 'browser', format: 'iife', minify: true });
+if (!cacheBuild.success) throw new AggregateError(cacheBuild.logs, 'Android cache worker build failed');
 await mkdir(`${out}/licenses`, { recursive: true });
 for (const name of ['wland', 'coi-serviceworker']) await cp(`${root}/node_modules/${name}/LICENSE`, `${out}/licenses/${name}.txt`);
 for (const file of ['runtime.sh', 'start-init.sh']) await cp(`${root}/guest/android/${file}`, `${out}/android/${file}`);
@@ -62,7 +66,7 @@ try {
 	console.log(`Building a cold-boot image: ${String(cause)}`);
 }
 const smp = !!await smpKernelFromBundle(new Uint8Array(await readFile(kernel)));
-await Bun.write(`${out}/android/boot.json`, JSON.stringify({ version: 1, identity, maxCpus: smp ? 4 : 1, checkpoint: false, seed }, null, 2));
+await Bun.write(`${out}/android/boot.json`, JSON.stringify({ version: 1, identity, maxCpus: smp ? 4 : 1, checkpoint: process.env.ANDROID_CHECKPOINTS !== '0', seed }, null, 2));
 async function directoryBytes(path: string): Promise<number> {
 	let bytes = 0;
 	for (const entry of await readdir(path, { withFileTypes: true })) {

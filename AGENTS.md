@@ -26,6 +26,13 @@ relay configuration from verified Android connectivity. App testing and APK
 upload are product goals; advertise them as available only after verification.
 Keep the site statically deployable on GitHub Pages.
 
+Keep successive launches fast by retaining immutable downloads and a verified
+initial startup checkpoint, rather than preserving arbitrary user sessions.
+Version caches with the actual kernel, images and runtime. Restore must pass
+the same display and UI-thread checks as cold boot, with a cold-boot fallback.
+Record timestamped startup phases and distinguish native measurements from
+browser measurements. Never promise a fast repeat launch when saving failed.
+
 - Keep the kernel, CPU emulator, SDK, graphics bridges, guest tools and licenses.
   The upstream desktop/demo website and upstream release workflow were removed.
   `pages/` is the focused full Android graphical demo, deployed by the Pages workflow.

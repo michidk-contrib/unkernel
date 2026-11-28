@@ -4,9 +4,10 @@ import { createWland, createStreamLink } from 'wland/client';
 import { nativeAndroidCursor } from './cursor.ts';
 import type { KernelHandle } from '../js/web.ts';
 import { parseBootAssets, verifySeed } from './boot-assets.ts';
-import { clearAndroidCheckpoint, loadAndroidCheckpoint, saveAndroidCheckpoint } from '../guest/android/checkpoint.ts';
+import { clearAllAndroidCheckpoints, clearAndroidCheckpoint, loadAndroidCheckpoint, saveAndroidCheckpoint } from '../guest/android/checkpoint.ts';
 import { DEFAULT_RELAYS, parseNetworkSettings, readNetworkSettings, networkSearch } from './network.ts';
 import type { NetworkSettings } from './network.ts';
+import { pruneAndroidAssets } from './asset-cache.ts';
 
 function element<T extends HTMLElement>(id: string, ctor: { new(...args: never[]): T }): T {
 	const value = document.getElementById(id);
@@ -26,6 +27,16 @@ const progressBar = element('boot-progress', HTMLProgressElement);
 const phases = element('boot-phases', HTMLOListElement);
 const downloadDetail = element('download-detail', HTMLSpanElement);
 const reportButton = element('report', HTMLButtonElement);
+const cacheMessage = element('cache-message', HTMLParagraphElement);
+const clearStartup = element('clear-startup', HTMLButtonElement);
+clearStartup.addEventListener('click', () => {
+	clearStartup.disabled = true;
+	void clearAllAndroidCheckpoints().then(() => {
+		cacheMessage.textContent = 'Saved startup cleared. The next launch initializes Android again; downloaded system files are kept.';
+	}).catch(cause => {
+		cacheMessage.textContent = `Could not clear saved startup: ${String(cause)}`;
+	}).finally(() => controls());
+});
 const networkForm = element('network-form', HTMLFormElement);
 const networkMode = element('network-mode', HTMLSelectElement);
 const relays = element('relays', HTMLTextAreaElement);
@@ -96,6 +107,12 @@ window.addEventListener('resize', fitFullscreen);
 let startupLog = '';
 let startedAt = 0;
 let lastStats: ReturnType<KernelHandle['stats']> | undefined;
+let bootTimings: { stage: string; elapsedMs: number }[] = [];
+// Also register on preview hosts that already supply COOP/COEP headers.
+if (isSecureContext && 'serviceWorker' in navigator) {
+	void navigator.serviceWorker.register(new URL('./coi-serviceworker.js', document.baseURI))
+		.catch(cause => appendLog(`Download cache worker unavailable: ${String(cause)}\n`));
+}
 function appendLog(text: string): void { startupLog = (startupLog + text).slice(-96000); }
 function visiblePixels(): number {
 	let maximum = 0;
@@ -115,7 +132,7 @@ function visiblePixels(): number {
 reportButton.addEventListener('click', () => {
 	const url = URL.createObjectURL(new Blob([JSON.stringify({
 		status: status.textContent, error: error.textContent, elapsedSeconds: Math.round((performance.now() - startedAt) / 1000),
-		browser: navigator.userAgent, isolated: crossOriginIsolated, visibility: document.visibilityState, stats: lastStats, log: startupLog,
+		browser: navigator.userAgent, isolated: crossOriginIsolated, visibility: document.visibilityState, stats: lastStats, timings: bootTimings, log: startupLog,
 	}, null, 2)], { type: 'application/json' }));
 	const link = document.createElement('a');
 	link.href = url; link.download = 'android-startup.json'; link.click();
@@ -132,6 +149,7 @@ function report(cause: unknown): void {
 function controls(): void {
 	start.disabled = busy || !!vm;
 	stop.disabled = !controller;
+	clearStartup.disabled = busy || !!vm;
 	for (const input of networkForm.querySelectorAll('input, select, textarea, button')) {
 		if (input instanceof HTMLInputElement || input instanceof HTMLSelectElement || input instanceof HTMLTextAreaElement || input instanceof HTMLButtonElement) input.disabled = busy || !!vm;
 	}
@@ -165,6 +183,7 @@ async function boot(): Promise<void> {
 	error.textContent = '';
 	startupLog = '';
 	startedAt = performance.now();
+	bootTimings = [];
 	lastStats = undefined;
 	reportButton.hidden = false;
 	placeholder.hidden = false;
@@ -175,6 +194,7 @@ async function boot(): Promise<void> {
 	phases.hidden = false;
 	downloadDetail.textContent = '';
 	const setPhase = (phase: number, label: string) => {
+		if (bootTimings.at(-1)?.stage !== label) bootTimings.push({ stage: label, elapsedMs: Math.round(performance.now() - startedAt) });
 		status.textContent = label;
 		progressBar.hidden = false;
 		progressBar.removeAttribute('value');
@@ -194,7 +214,10 @@ async function boot(): Promise<void> {
 			placeholder.textContent = `${status.textContent} Keep this tab visible during startup.`;
 			// A small boot message is enough to uncover Android. Keep it uncovered
 			// through black frames between activities; readiness is checked separately.
-			displayShown ||= visiblePixels() > 0;
+			if (!displayShown && visiblePixels() > 0) {
+				displayShown = true;
+				bootTimings.push({ stage: 'First Android pixels', elapsedMs: Math.round(performance.now() - startedAt) });
+			}
 			placeholder.hidden = displayShown;
 		}
 	};
@@ -219,7 +242,13 @@ async function boot(): Promise<void> {
 			checkedFetch('./android/boot.json', signal).then(response => response.json()).then(parseBootAssets),
 		]);
 		const cpus = Math.min(assets.maxCpus, Math.max(1, navigator.hardwareConcurrency || 1));
-		const checkpointIdentity = `${assets.identity}:2048:${cpus}:${networkSearch(network)}:android-checkpoint-v3`;
+		void pruneAndroidAssets(assets.identity).catch(cause => appendLog(`Download cache unavailable: ${String(cause)}\n`));
+		const versionedAsset = (path: string) => {
+			const url = new URL(path, document.baseURI);
+			url.searchParams.set('v', assets.identity);
+			return url.href;
+		};
+		const checkpointIdentity = `${assets.identity}:2048:${cpus}:${networkSearch(network)}:android-checkpoint-v4`;
 		const forgetCheckpoint = async () => {
 			try { await clearAndroidCheckpoint(checkpointIdentity); }
 			catch (cause) { appendLog(`Could not clear local checkpoint: ${String(cause)}\n`); }
@@ -232,6 +261,7 @@ async function boot(): Promise<void> {
 				appendLog(`Local checkpoint unavailable: ${String(cause)}\n`);
 				await forgetCheckpoint();
 			}
+			cacheMessage.textContent = restore ? 'Using the startup saved on this device.' : 'First startup for this configuration. Android will save its initial ready state for later launches.';
 		}
 		for (;;) {
 			const restoring = restore !== undefined;
@@ -241,11 +271,12 @@ async function boot(): Promise<void> {
 			try {
 				setPhase(1, restoring ? 'Restoring saved Android startup…' : 'Booting Linux and opening Android disks…');
 				const instance = await sdk.createKernel({
+					kernel: versionedAsset('./runtime/unkernel.wasm'),
 					memoryMiB: 2048, memoryFallbackMiB: [], cpus, worker: true, signal: attemptSignal, restore,
 					cmdline: 'console=hvc0 rdinit=/init loglevel=3 androidboot.hardware=waydroid androidboot.selinux=permissive androidboot.serialno=unkernel',
 					gpu: true, display: { width: 360, height: 640 },
 					net: network.mode === 'wisp' ? { kind: 'net', backend: { kind: 'wisp', servers: network.servers } } : undefined,
-					disks: ['system', 'vendor'].map(name => ({ kind: 'http', url: new URL(`./android/${name}.erofs`, document.baseURI).href, readOnly: true })),
+					disks: ['system', 'vendor'].map(name => ({ kind: 'http', url: versionedAsset(`./android/${name}.erofs`), readOnly: true })),
 					onProgress: event => {
 						if (signal.aborted) return;
 						switch (event.stage) {
@@ -417,8 +448,10 @@ exit 1`);
 						screen.inert = false;
 						const bytes = await saveAndroidCheckpoint(checkpointIdentity, snapshot);
 						appendLog(`Saved local Android checkpoint: ${bytes} bytes\n`);
+						cacheMessage.textContent = `Startup saved on this device (${(bytes / 1048576).toFixed(0)} MiB). Later launches can skip Android initialization. Stopping still discards session changes.`;
 					} catch (cause) {
 						appendLog(`Local checkpoint was not saved: ${String(cause)}\n`);
+						cacheMessage.textContent = 'Startup could not be saved. Later launches will initialize Android again. Download caching may still help.';
 					}
 					if (!signal.aborted) {
 						setPhase(5, 'Android interface ready');
@@ -431,6 +464,7 @@ exit 1`);
 			} catch (cause) {
 				if (!restoring || signal.aborted) throw cause;
 				appendLog(`Saved startup failed; starting Android normally: ${String(cause)}\n`);
+				cacheMessage.textContent = 'Saved startup could not resume. Starting Android normally and replacing it when ready.';
 				desktop?.dispose(); desktop = undefined;
 				const failed = vm; vm = undefined;
 				await failed?.stop();

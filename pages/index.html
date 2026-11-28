@@ -23,6 +23,8 @@
 <dl class="specs"><div><dt>Image</dt><dd>Minimal Waydroid <span>Android 13 · ARM64</span></dd></div><div><dt>Memory</dt><dd>2 GiB <span>Reserved while running</span></dd></div><div><dt>Display</dt><dd>360 × 640 <span>Software graphics</span></dd></div></dl>
 <div class="actions"><button id="start" class="primary">Start Android<svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7 4 9 6-9 6Z" fill="currentColor"/></svg></button><button id="stop" disabled>Stop</button></div>
 <p class="session-note">Stopping discards this session.</p>
+<p id="cache-message" class="session-note">The first launch initializes Android. Saved startup and downloaded system files can make later launches faster on this device.</p>
+<button id="clear-startup" type="button">Clear saved startup</button>
 </section>
 <details class="network-settings"><summary>Internet connection <span id="network-badge">WISP</span></summary>
 <form id="network-form">

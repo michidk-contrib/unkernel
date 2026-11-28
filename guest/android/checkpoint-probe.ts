@@ -6,6 +6,7 @@ import { resolve } from 'node:path';
 import { createKernel } from '../../js/node.ts';
 import { createHeadless, encodePNG } from 'wland/headless';
 import { readSeed, restoreSeed, saveSeed, seedIdentity } from './seed.ts';
+import { encodeAndroidCheckpoint, decodeAndroidCheckpoint } from './checkpoint.ts';
 
 const root = resolve(import.meta.dirname, '../..');
 const assets = resolve(root, 'dist-pages');
@@ -13,6 +14,7 @@ const options = {
 	kernel: resolve(assets, 'runtime/unkernel.wasm'), memoryMiB: 2048, cpus: 1,
 	cmdline: 'console=hvc0 rdinit=/init loglevel=3 androidboot.hardware=waydroid androidboot.selinux=permissive androidboot.serialno=unkernel',
 	gpu: true, display: { width: 360, height: 640 },
+	...(process.env.ANDROID_WISP ? { net: { kind: 'net' as const, backend: { kind: 'wisp' as const, servers: process.env.ANDROID_WISP } } } : {}),
 	disks: ['system', 'vendor'].map(name => ({ kind: 'file' as const, path: resolve(assets, `android/${name}.erofs`), readOnly: true })),
 };
 let vm = await createKernel(options);
@@ -69,9 +71,14 @@ try {
 	const child = (await exec(`for i in $(seq 400); do for child in $(cat /proc/${parent}/task/${parent}/children 2>/dev/null); do if [ "$(nsenter -t "$child" -m -p /system/bin/getprop sys.boot_completed 2>/dev/null)" = 1 ]; then echo "$child"; exit 0; fi; break; done; sleep 1; done; tail -50 /tmp/android-init.log >&2; exit 1`)).trim();
 	namespaceChild = child;
 	note(`Boot complete, namespace ${child}, windows ${desktop.windows().length}`);
+	await exec(`nsenter -t ${child} -m -p /system/bin/cmd package set-home-activity --user 0 dev.unkernel.home/.HomeActivity`);
 	await exec(`nsenter -t ${child} -m -p /system/bin/am start -a android.intent.action.MAIN -c android.intent.category.HOME`);
 	await exec(`for i in $(seq 60); do if nsenter -t ${child} -m -p /system/bin/dumpsys activity activities | grep -q 'topResumedActivity.*dev.unkernel.home/'; then exit 0; fi; sleep 1; done; exit 1`);
 	await waitForPixels();
+	const inputReady = () => exec(`nsenter -t ${child} -m -p /system/bin/dumpsys -t 15 activity dev.unkernel.home/.HomeActivity | grep -q 'View Hierarchy:'`);
+	await inputReady();
+	const coldReadyMs = performance.now() - started;
+	note('Cold Home drawn and UI thread responding');
 	homeDrawn = true;
 	// Closing lmkd's PSI trigger descriptors destroys the non-parkable psimon kthread.
 	await exec(`nsenter -t ${child} -m -p /system/bin/setprop ctl.stop lmkd; for i in $(seq 30); do if ! ps -ef | grep -q '[p]simon'; then exit 0; fi; sleep 1; done; ps -ef >&2; exit 1`);
@@ -85,12 +92,29 @@ try {
 	note(`Captured ${(snapshot.memory.byteLength - (snapshot.freeBytes ?? 0)) / 1048576} MiB used`);
 	desktop.dispose(); desktop = undefined; listener.close();
 	await vm.stop();
+	const encodeStarted = performance.now();
+	const blob = await encodeAndroidCheckpoint(snapshot);
+	note(`Serialized checkpoint ${(blob.size / 1048576).toFixed(1)} MiB in ${((performance.now() - encodeStarted) / 1000).toFixed(1)}s`);
+	const restoreStarted = performance.now();
+	snapshot = await decodeAndroidCheckpoint(blob);
 	vm = await createKernel({ ...options, restore: snapshot });
 	await exec(`nsenter -t ${child} -m -p /system/bin/setprop ctl.start lmkd`);
 	const restoredListener = vm.vsock!.listen(1023);
 	desktop = await createHeadless({ link: restoredListener, width: 360, height: 640 });
 	for (let i = 0; i < 30 && !desktop.windows().length; i++) await exec('sleep 1');
 	await waitForPixels();
+	await inputReady();
+	const restoredReadyMs = performance.now() - restoreStarted;
+	note(`Restored Home responding in ${(restoredReadyMs / 1000).toFixed(1)}s, including decompression`);
+	if (process.env.ANDROID_WISP) {
+		// Click the launcher's visible Check internet button through Wayland.
+		desktop.pointerMove(180, 281);
+		desktop.click(180, 282);
+		await exec(`for i in $(seq 60); do\nnsenter -t ${child} -m -p /system/bin/logcat -d -s BrowserHome:I '*:S' | grep -q 'Network HTTP 200' && exit 0\nsleep 1\ndone\nexit 1`);
+		await inputReady();
+		note('Restored Wayland click triggered Android HTTPS through WISP: HTTP 200');
+	}
+	await writeFile('/tmp/android-checkpoint-timing.json', JSON.stringify({ coldReadyMs, restoredReadyMs, checkpointBytes: blob.size, wisp: !!process.env.ANDROID_WISP }, null, 2));
 	const state = await exec(`nsenter -t ${child} -m -p /system/bin/getprop sys.boot_completed; cat /tmp/relay.log; ps -ef | head -15`);
 	note(`Restored ${desktop.windows().length} windows; ${state}`);
 	if (!desktop.windows().length) throw new Error('No Android window reconnected after restore');

@@ -76,7 +76,7 @@ jobs:
         env:
           ANDROID_DATA_SEED: ${{ github.workspace }}/vendor/android/web
           ANDROID_REPORTS: ${{ github.workspace }}/vendor/android/framework-reports/prepared
-      - run: bun test test/android-seed.test.ts test/android-checkpoint.test.ts test/android-boot-assets.test.ts
+      - run: bun test test/android-seed.test.ts test/android-checkpoint.test.ts test/android-boot-assets.test.ts test/android-asset-cache.test.ts test/android-network-settings.test.ts
       - uses: actions/upload-artifact@v4
         if: always()
         with:
